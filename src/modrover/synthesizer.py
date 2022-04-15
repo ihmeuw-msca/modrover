@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -30,7 +30,7 @@ def get_weighted_sd(means: ArrayLike, sds: ArrayLike, weights: ArrayLike):
 
 def synthesize(df: pd.DataFrame,
                synth_specs: SynthSpecs,
-               required_covs: List[str]) -> Dict:
+               required_covs: List[str]) -> pd.DataFrame:
     for cov in list(synth_specs.cov_bounds.keys()):
         if cov not in required_covs:
             del synth_specs.cov_bounds[cov]
@@ -48,12 +48,12 @@ def synthesize(df: pd.DataFrame,
         synth_specs.ratio_cutoff
     )
 
-    result = {}
-    for cov in required_covs:
-        result[cov] = float(df[cov].dot(df["weights"]))
-        result[cov + "_sd"] = float(get_weighted_sd(
-            df[cov], df[cov + "_sd"], df["weights"]
-        ))
-        result[f"num_present_{cov}"] = int((df[cov] != 0.0).sum())
-    result["num_valid"] = int(df.shape[0])
-    return result
+    df_result = pd.DataFrame({
+        "cov_name": required_covs,
+        "mean": [df[cov].dot(df["weights"]) for cov in required_covs],
+        "sd": [get_weighted_sd(df[cov], df[cov + "_sd"], df["weights"])
+               for cov in required_covs],
+        "num_present": [int((df[cov] != 0.0).sum()) for cov in required_covs],
+        "num_valid": int(df.shape[0]),
+    })
+    return df_result

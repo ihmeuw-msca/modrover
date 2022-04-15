@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,9 +7,8 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 def visualize(df_coefs: pd.DataFrame,
-              synth_result: Dict[str, float],
-              model_counts: Dict[str, int],
-              required_covs: List[str]):
+              df_synth: pd.DataFrame,
+              model_counts: Dict[str, int]):
     np.random.seed(0)
     markers = {
         "init": "^",
@@ -17,6 +16,7 @@ def visualize(df_coefs: pd.DataFrame,
     }
 
     # plot the coefficients
+    required_covs = df_synth["cov_name"].to_numpy()
     fig, ax = plt.subplots(
         len(required_covs), 1, figsize=(8, 2*len(required_covs)), sharex=True
     )
@@ -59,20 +59,20 @@ def visualize(df_coefs: pd.DataFrame,
         cbar = fig.colorbar(im, cax=cax, orientation='vertical')
         cbar.ax.set_yticks([vmin, vmax])
         ax[i].plot(
-            [synth_result[cov]]*2,
+            [df_synth.loc[i, "mean"]]*2,
             [0, 1], color="#008080", linewidth=1,
-            label=f"average={synth_result[cov]:.2f}"
+            label=f"average={df_synth.loc[i, 'mean']:.2f}"
         )
         ax[i].plot(
-            [synth_result[cov] - 1.96*synth_result[cov + "_sd"],
-             synth_result[cov] + 1.96*synth_result[cov + "_sd"]],
+            [df_synth.loc[i, "mean"] - 1.96*df_synth.loc[i, "sd"],
+             df_synth.loc[i, "mean"] + 1.96*df_synth.loc[i, "sd"]],
             [0.5]*2, color="#008080", linewidth=1,
-            label=f"average_sd={synth_result[cov + '_sd']:.2f}"
+            label=f"average_sd={df_synth.loc[i, 'sd']:.2f}"
         )
         ax[i].axvline(0, linewidth=1, color="grey", linestyle="--")
         ax[i].legend(loc="upper left", bbox_to_anchor=(1.10, 1), fontsize=9)
-        num_present = synth_result[f"num_present_{cov}"]
-        num_valid = synth_result["num_valid"]
+        num_present = df_synth.loc[i, "num_present"]
+        num_valid = df_synth.loc[i, "num_valid"]
         ax[i].text(
             0.02, 0.92,
             (f"present = {num_present}/{model_counts['num_models']}\n"

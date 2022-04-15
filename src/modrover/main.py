@@ -2,7 +2,6 @@ from operator import attrgetter
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 from pplkit.data.interface import DataInterface
 
