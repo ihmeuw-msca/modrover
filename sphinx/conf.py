@@ -15,9 +15,9 @@
 # sys.path.insert(0, os.path.abspath("."))
 from pathlib import Path
 
-import rover
+import modrover
 
-base_dir = Path(rover.__file__).parent
+base_dir = Path(modrover.__file__).parent
 
 about = {}
 with (base_dir / "__about__.py").open() as f:

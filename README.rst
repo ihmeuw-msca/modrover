@@ -1,8 +1,8 @@
-.. image:: https://github.com/ihmeuw-msca/rover/workflows/build/badge.svg
-    :target: https://github.com/ihmeuw-msca/rover/actions
+.. image:: https://github.com/ihmeuw-msca/modrover/workflows/build/badge.svg
+    :target: https://github.com/ihmeuw-msca/modrover/actions
 
-.. image:: https://badge.fury.io/py/rover.svg
-    :target: https://badge.fury.io/py/rover
+.. image:: https://badge.fury.io/py/modrover.svg
+    :target: https://badge.fury.io/py/modrover
 
-Rover: Model space exploration
-==============================
+ModRover: Model space exploration
+=================================

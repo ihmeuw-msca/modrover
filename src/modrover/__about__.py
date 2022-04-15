@@ -11,9 +11,9 @@ __all__ = [
     "__copyright__",
 ]
 
-__title__ = "rover"
+__title__ = "modrover"
 __summary__ = ""
-__uri__ = "https://github.com/ihmeuw-msca/rover"
+__uri__ = "https://github.com/ihmeuw-msca/modrover"
 __version__ = "0.0.0"
 __author__ = "IHME Math Sciences"
 __email__ = "ihme.math.sciences@gmail.com"
