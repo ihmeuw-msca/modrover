@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 
 if __name__ == "__main__":
     base_dir = Path(__file__).parent
-    src_dir = base_dir / "src" / "toreplace"
+    src_dir = base_dir / "src" / "rover"
 
     about = {}
     with (src_dir / "__about__.py").open() as f:
