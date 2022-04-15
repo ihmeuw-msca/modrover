@@ -25,6 +25,10 @@ class ModelSpecs:
         if self.col_holdout not in self.col_id:
             self.col_id = (*self.col_id, self.col_holdout)
 
+    @property
+    def all_covs(self) -> str:
+        return (*self.col_fixed_covs, *self.col_covs)
+
 
 @dataclass
 class ModelEval:

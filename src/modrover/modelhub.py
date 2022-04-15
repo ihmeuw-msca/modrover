@@ -55,7 +55,8 @@ class ModelHub:
             }
         )
         if df_coefs is not None:
-            model.opt_coefs = df_coefs["mean"].to_numpy()
+            df_coefs = df_coefs.set_index("cov_name")
+            model.opt_coefs = df_coefs.loc[col_covs, "mean"].to_numpy()
         return model
 
     def _fit_model(self,

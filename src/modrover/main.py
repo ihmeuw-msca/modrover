@@ -35,7 +35,7 @@ class Rover:
         return pd.concat([
             collect_result(
                 self.modelhub.dataif.get_fpath(sub_dir, key="output"),
-                required_covs=self.modelhub.specs.col_covs
+                required_covs=self.modelhub.specs.all_covs
             )
             for sub_dir in sub_dirs
         ], axis=0).reset_index(drop=True)
