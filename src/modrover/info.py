@@ -26,7 +26,7 @@ class ModelSpecs:
             self.col_id = (*self.col_id, self.col_holdout)
 
     @property
-    def all_covs(self) -> str:
+    def all_covs(self) -> Tuple[str, ...]:
         return (*self.col_fixed_covs, *self.col_covs)
 
 

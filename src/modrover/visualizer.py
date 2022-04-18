@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -6,10 +6,30 @@ import pandas as pd
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
+def _plot_synth(df_synth: pd.DataFrame,
+                cov: str,
+                name: str,
+                ax: plt.Axes,
+                y: float = 0.5,
+                **kwargs):
+    ax.plot(
+        [df_synth.loc[cov, "mean"]]*2,
+        [0, 1], label=f"{name}={df_synth.loc[cov, 'mean']:.2f}",
+        **kwargs
+    )
+    ax.plot(
+        [df_synth.loc[cov, "mean"] - 1.96*df_synth.loc[cov, "sd"],
+         df_synth.loc[cov, "mean"] + 1.96*df_synth.loc[cov, "sd"]],
+        [y]*2, label=f"{name}_sd={df_synth.loc[cov, 'sd']:.2f}",
+        **kwargs
+    )
+
+
 def visualize(df_coefs: pd.DataFrame,
               df_synth: pd.DataFrame,
               model_counts: Dict[str, int],
-              required_covs: Dict[str, int]):
+              required_covs: Dict[str, int],
+              df_synth_valid: Optional[pd.DataFrame] = None):
     np.random.seed(0)
     markers = {
         "init": "^",
@@ -35,6 +55,8 @@ def visualize(df_coefs: pd.DataFrame,
         ]
     }
     df_synth = df_synth.set_index("cov_name")
+    if df_synth_valid is not None:
+        df_synth_valid = df_synth_valid.set_index("cov_name")
     for i, cov in enumerate(required_covs):
         indices["init"] = [
             dir_name == f"0_{i + 1}"
@@ -59,17 +81,11 @@ def visualize(df_coefs: pd.DataFrame,
         cax = divider.append_axes('right', size='2%', pad=0.05)
         cbar = fig.colorbar(im, cax=cax, orientation='vertical')
         cbar.ax.set_yticks([vmin, vmax])
-        ax[i].plot(
-            [df_synth.loc[cov, "mean"]]*2,
-            [0, 1], color="#008080", linewidth=1,
-            label=f"average={df_synth.loc[cov, 'mean']:.2f}"
-        )
-        ax[i].plot(
-            [df_synth.loc[cov, "mean"] - 1.96*df_synth.loc[cov, "sd"],
-             df_synth.loc[cov, "mean"] + 1.96*df_synth.loc[cov, "sd"]],
-            [0.5]*2, color="#008080", linewidth=1,
-            label=f"average_sd={df_synth.loc[cov, 'sd']:.2f}"
-        )
+        _plot_synth(df_synth, cov, "average", ax[i],
+                    color="#008080", linewidth=1)
+        if df_synth_valid is not None:
+            _plot_synth(df_synth_valid, cov, "average_valid", ax[i], y=0.55,
+                        color="red", linewidth=1)
         ax[i].axvline(0, linewidth=1, color="grey", linestyle="--")
         ax[i].legend(loc="upper left", bbox_to_anchor=(1.10, 1), fontsize=9)
         num_present = df_synth.loc[cov, "num_present"]

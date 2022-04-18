@@ -30,7 +30,8 @@ def get_weighted_sd(means: ArrayLike, sds: ArrayLike, weights: ArrayLike):
 
 def synthesize(df: pd.DataFrame,
                synth_specs: SynthSpecs,
-               required_covs: List[str]) -> pd.DataFrame:
+               required_covs: List[str],
+               validate: bool = False) -> pd.DataFrame:
     for cov in list(synth_specs.cov_bounds.keys()):
         if cov not in required_covs:
             del synth_specs.cov_bounds[cov]
@@ -39,6 +40,7 @@ def synthesize(df: pd.DataFrame,
             (df[cov] >= bounds[0]) & (df[cov] <= bounds[1])
             for cov, bounds in synth_specs.cov_bounds.items()
         ]).all(axis=0)
+    if validate:
         df = df[valid].reset_index(drop=True)
 
     df["weights"] = metrics_to_weights(
@@ -54,6 +56,6 @@ def synthesize(df: pd.DataFrame,
         "sd": [get_weighted_sd(df[cov], df[cov + "_sd"], df["weights"])
                for cov in required_covs],
         "num_present": [int((df[cov] != 0.0).sum()) for cov in required_covs],
-        "num_valid": int(df.shape[0]),
+        "num_valid": int(valid.sum()),
     })
     return df_result
