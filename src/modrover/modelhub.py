@@ -210,5 +210,6 @@ class ModelHub:
             for sub_dir in self.dataif.output.iterdir():
                 sub_dir = sub_dir.name
                 cov_ids = tuple(map(int, sub_dir.split("_")))[1:]
-                cov_ids_set.append(cov_ids)
+                if self._has_ran(cov_ids):
+                    cov_ids_set.append(cov_ids)
         return set(cov_ids_set)
