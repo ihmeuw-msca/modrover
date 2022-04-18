@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 from numpy.typing import ArrayLike
 from regmod.models import BinomialModel, GaussianModel, PoissonModel
@@ -17,9 +19,12 @@ model_type_dict = {
 }
 
 
-def get_r2(obs: ArrayLike, pred: ArrayLike) -> float:
+def get_r2(obs: ArrayLike, pred: ArrayLike,
+           obs_mean: Optional[float] = None) -> float:
     ss_residual = np.sum((obs - pred)**2)
-    ss_total = np.sum((obs - np.mean(obs))**2)
+    if obs_mean is None:
+        obs_mean = obs.mean()
+    ss_total = np.sum((obs - obs_mean)**2)
     return float(min(max(0.0, 1 - ss_residual / ss_total), 1.0))
 
 
