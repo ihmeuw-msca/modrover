@@ -91,9 +91,13 @@ def visualize(df_coefs: pd.DataFrame,
         num_present = df_synth.loc[cov, "num_present"]
         num_valid = df_synth.loc[cov, "num_valid"]
         ax[i].text(
-            0.02, 0.92,
+            1.45, 0.92,
             (f"present = {num_present}/{model_counts['num_models']}\n"
-             f"valid = {num_valid}/{model_counts['num_models']}"),
+             f"valid = {num_valid}/{model_counts['num_models']}\n"
+             f"oospv_init = {float(df_coefs.loc[indices['init'], 'outsample']):.3f}\n"
+             f"oospv_final = {float(df_coefs.loc[indices['final'], 'outsample']):.3f}\n"
+             f"oospv_present = {float(df_coefs.loc[df_coefs[cov] != 0, 'outsample'].mean()):.3f}\n"
+             f"oospv_not_present = {float(df_coefs.loc[df_coefs[cov] == 0, 'outsample'].mean()):.3f}"),
             horizontalalignment='left',
             verticalalignment='top',
             transform=ax[i].transAxes,
