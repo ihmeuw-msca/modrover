@@ -115,7 +115,7 @@ class ModelHub:
         sub_dir = self.get_sub_dir(cov_ids)
         if df_pred is None:
             df_pred = self.dataif.load_output(sub_dir, "result.parquet")
-        obs = df_pred[self.specs.col_obs].to_numpy()
+        obs = df_pred[self.specs.col_eval_obs].to_numpy()
         pred = df_pred[self.specs.col_eval_pred].to_numpy()
         holdout = df_pred[self.specs.col_holdout].to_numpy()
 

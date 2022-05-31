@@ -37,7 +37,7 @@ class ModelSpecs:
             self.col_eval_obs,
             self.col_eval_pred
         ))
-        return tuple(col_kept)
+        return list(col_kept)
 
 
 @dataclass
