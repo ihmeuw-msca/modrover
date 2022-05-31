@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -31,6 +31,7 @@ def get_weighted_sd(means: ArrayLike, sds: ArrayLike, weights: ArrayLike):
 def synthesize(df: pd.DataFrame,
                synth_specs: SynthSpecs,
                required_covs: List[str],
+               num_groups: int = 1,
                validate: bool = False) -> pd.DataFrame:
     for cov in list(synth_specs.cov_bounds.keys()):
         if cov not in required_covs:
@@ -40,6 +41,8 @@ def synthesize(df: pd.DataFrame,
             (df[cov] >= bounds[0]) & (df[cov] <= bounds[1])
             for cov, bounds in synth_specs.cov_bounds.items()
         ]).all(axis=0)
+    else:
+        valid = np.repeat(True, df.shape[0])
     if validate:
         df = df[valid].reset_index(drop=True)
 
@@ -49,13 +52,15 @@ def synthesize(df: pd.DataFrame,
         synth_specs.kernel_param,
         synth_specs.ratio_cutoff
     )
-
     df_result = pd.DataFrame({
         "cov_name": required_covs,
         "mean": [df[cov].dot(df["weights"]) for cov in required_covs],
         "sd": [get_weighted_sd(df[cov], df[cov + "_sd"], df["weights"])
                for cov in required_covs],
-        "num_present": [int((df[cov] != 0.0).sum()) for cov in required_covs],
-        "num_valid": int(valid.sum()),
+        "num_present": [np.round(int((df[cov] != 0.0).sum()) / num_groups, 2) for cov in required_covs],
+        "num_valid": np.round(int(valid.sum()) / num_groups, 2),
+        "insample": float(df["insample"].dot(df["weights"])),
+        "outsample": float(df["outsample"].dot(df["weights"])),
+        "used_model_pct": float((df["weights"] > 0).sum() / len(df)),
     })
     return df_result

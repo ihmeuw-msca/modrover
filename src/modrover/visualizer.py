@@ -40,6 +40,8 @@ def visualize(df_coefs: pd.DataFrame,
     fig, ax = plt.subplots(
         len(required_covs), 1, figsize=(8, 2*len(required_covs)), sharex=True
     )
+    if isinstance(ax, plt.Axes):
+        ax = [ax]
     ax[0].set_title(
         (f"models="
          f"{model_counts['num_models']}/"
@@ -94,10 +96,12 @@ def visualize(df_coefs: pd.DataFrame,
             1.45, 0.92,
             (f"present = {num_present}/{model_counts['num_models']}\n"
              f"valid = {num_valid}/{model_counts['num_models']}\n"
-             f"oospv_init = {float(df_coefs.loc[indices['init'], 'outsample']):.3f}\n"
-             f"oospv_final = {float(df_coefs.loc[indices['final'], 'outsample']):.3f}\n"
+             f"oospv_init = {np.mean(df_coefs.loc[indices['init'], 'outsample']):.3f}\n"
+             f"oospv_final = {np.mean(df_coefs.loc[indices['final'], 'outsample']):.3f}\n"
              f"oospv_present = {float(df_coefs.loc[df_coefs[cov] != 0, 'outsample'].mean()):.3f}\n"
-             f"oospv_not_present = {float(df_coefs.loc[df_coefs[cov] == 0, 'outsample'].mean()):.3f}"),
+             f"oospv_not_present = {float(df_coefs.loc[df_coefs[cov] == 0, 'outsample'].mean()):.3f}\n"
+             f"oospv_synth = {float(df_synth['outsample'][0]):.3f}\n"
+             f"used_model_pct = {float(df_synth['used_model_pct'][0]):.3f}"),
             horizontalalignment='left',
             verticalalignment='top',
             transform=ax[i].transAxes,

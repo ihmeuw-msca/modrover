@@ -19,7 +19,7 @@ class RoverStrategy(ABC):
 
     def run_model(self, cov_ids: CovIDs):
         self.modelhub.run_model(cov_ids)
-        if cov_ids not in self.performances:
+        if cov_ids not in self.performances and self.modelhub._has_ran(cov_ids):
             performance = self.modelhub.get_model_performance(cov_ids)
             self.performances[cov_ids] = performance
 

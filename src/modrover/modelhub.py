@@ -104,6 +104,8 @@ class ModelHub:
             *self.specs.col_id,
             self.specs.col_obs,
             "pred",
+            # "Adjusted SMR, all deaths",
+            # "Expected Deaths, all deaths",
         ]
         df_pred = df_pred[col_kept].copy()
         self.dataif.dump_output(df_pred, sub_dir, "result.parquet")
@@ -117,6 +119,8 @@ class ModelHub:
             df_pred = self.dataif.load_output(sub_dir, "result.parquet")
         obs = df_pred[self.specs.col_obs].to_numpy()
         pred = df_pred["pred"].to_numpy()
+        # obs = df_pred["Adjusted SMR, all deaths"].to_numpy()
+        # pred = (df_pred["pred"] / df_pred["Expected Deaths, all deaths"]).to_numpy()
         holdout = df_pred[self.specs.col_holdout].to_numpy()
 
         obs = self.eval.transformation(obs)
@@ -126,6 +130,8 @@ class ModelHub:
             "insample": holdout == 0,
             "outsample": holdout == 1,
         }
+
+        # pred = pred - pred[indices["insample"]].mean() + obs[indices["insample"]].mean()
 
         performance = {
             t: self.eval.metric(obs[indices[t]], pred[indices[t]])
