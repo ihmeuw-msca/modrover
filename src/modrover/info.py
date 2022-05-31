@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Tuple, Type
 
-from .globals import metric_dict, model_type_dict, transformation_dict
+from .globals import metric_dict, model_type_dict
 
 
 @dataclass
@@ -44,11 +44,8 @@ class ModelSpecs:
 class ModelEval:
 
     metric: Callable = metric_dict["r2"]
-    transformation: Callable = transformation_dict["identity"]
 
     def __post_init__(self):
-        if isinstance(self.transformation, str):
-            self.transformation = transformation_dict[self.transformation]
         if isinstance(self.metric, str):
             self.metric = metric_dict[self.metric]
 

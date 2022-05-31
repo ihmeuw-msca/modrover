@@ -119,9 +119,6 @@ class ModelHub:
         pred = df_pred[self.specs.col_eval_pred].to_numpy()
         holdout = df_pred[self.specs.col_holdout].to_numpy()
 
-        obs = self.eval.transformation(obs)
-        pred = self.eval.transformation(pred)
-
         indices = {
             "insample": holdout == 0,
             "outsample": holdout == 1,
