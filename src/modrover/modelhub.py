@@ -5,6 +5,7 @@ from typing import Dict, Optional
 from warnings import warn
 
 import numpy as np
+from numpy.typing import ArrayLike
 from pandas import DataFrame
 from pplkit.data.interface import DataInterface
 from regmod.data import Data
@@ -84,6 +85,12 @@ class ModelHub:
         self.dataif.dump_output(df_coefs, sub_dir, "coefs.csv")
         return df_coefs
 
+    def _get_eval_obs(self, df: DataFrame) -> ArrayLike:
+        return df[self.specs.col_obs]
+
+    def _get_eval_pred(self, df: DataFrame) -> ArrayLike:
+        return df[self.specs.model_param_name]
+
     def _predict_model(self,
                        cov_ids: CovIDs,
                        df: Optional[DataFrame] = None,
@@ -96,18 +103,9 @@ class ModelHub:
         model = self._get_model(cov_ids, df_coefs=df_coefs)
 
         df_pred = model.predict(df)
-        df_pred.rename(
-            columns={self.specs.model_param_name: "pred"},
-            inplace=True
-        )
-        col_kept = [
-            *self.specs.col_id,
-            self.specs.col_obs,
-            "pred",
-            # "Adjusted SMR, all deaths",
-            # "Expected Deaths, all deaths",
-        ]
-        df_pred = df_pred[col_kept].copy()
+        df_pred[self.specs.col_eval_obs] = self._get_eval_obs(df_pred)
+        df_pred[self.specs.col_eval_pred] = self._get_eval_pred(df_pred)
+        df_pred = df_pred[self.specs.col_kept].copy()
         self.dataif.dump_output(df_pred, sub_dir, "result.parquet")
         return df_pred
 
@@ -117,21 +115,14 @@ class ModelHub:
         sub_dir = self.get_sub_dir(cov_ids)
         if df_pred is None:
             df_pred = self.dataif.load_output(sub_dir, "result.parquet")
-        obs = df_pred[self.specs.col_obs].to_numpy()
-        pred = df_pred["pred"].to_numpy()
-        # obs = df_pred["Adjusted SMR, all deaths"].to_numpy()
-        # pred = (df_pred["pred"] / df_pred["Expected Deaths, all deaths"]).to_numpy()
+        obs = df_pred[self.specs.col_eval_obs].to_numpy()
+        pred = df_pred[self.specs.col_eval_pred].to_numpy()
         holdout = df_pred[self.specs.col_holdout].to_numpy()
-
-        obs = self.eval.transformation(obs)
-        pred = self.eval.transformation(pred)
 
         indices = {
             "insample": holdout == 0,
             "outsample": holdout == 1,
         }
-
-        # pred = pred - pred[indices["insample"]].mean() + obs[indices["insample"]].mean()
 
         performance = {
             t: self.eval.metric(obs[indices[t]], pred[indices[t]])

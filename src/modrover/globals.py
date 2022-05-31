@@ -4,14 +4,6 @@ import numpy as np
 from numpy.typing import ArrayLike
 from regmod.models import BinomialModel, GaussianModel, PoissonModel
 
-transformation_dict = {
-    "identity": lambda x: x,
-    "exp": np.exp,
-    "log": np.log,
-    "expit": lambda x: 1 / (1 + np.exp(-x)),
-    "logit": lambda x: np.log(x / (1 - x)),
-}
-
 model_type_dict = {
     "gaussian": GaussianModel,
     "poisson": PoissonModel,
