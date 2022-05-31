@@ -5,6 +5,7 @@ from typing import Dict, Optional
 from warnings import warn
 
 import numpy as np
+from numpy.typing import ArrayLike
 from pandas import DataFrame
 from pplkit.data.interface import DataInterface
 from regmod.data import Data
@@ -84,6 +85,12 @@ class ModelHub:
         self.dataif.dump_output(df_coefs, sub_dir, "coefs.csv")
         return df_coefs
 
+    def _get_eval_obs(self, df: DataFrame) -> ArrayLike:
+        return df[self.specs.col_obs]
+
+    def _get_eval_pred(self, df: DataFrame) -> ArrayLike:
+        return df[self.specs.model_param_name]
+
     def _predict_model(self,
                        cov_ids: CovIDs,
                        df: Optional[DataFrame] = None,
@@ -96,10 +103,8 @@ class ModelHub:
         model = self._get_model(cov_ids, df_coefs=df_coefs)
 
         df_pred = model.predict(df)
-        df_pred.rename(
-            columns={self.specs.model_param_name: self.specs.col_pred},
-            inplace=True
-        )
+        df_pred[self.specs.col_eval_obs] = self._get_eval_obs(df_pred)
+        df_pred[self.specs.col_eval_pred] = self._get_eval_pred(df_pred)
         df_pred = df_pred[self.specs.col_kept].copy()
         self.dataif.dump_output(df_pred, sub_dir, "result.parquet")
         return df_pred
@@ -111,7 +116,7 @@ class ModelHub:
         if df_pred is None:
             df_pred = self.dataif.load_output(sub_dir, "result.parquet")
         obs = df_pred[self.specs.col_obs].to_numpy()
-        pred = df_pred[self.specs.col_pred].to_numpy()
+        pred = df_pred[self.specs.col_eval_pred].to_numpy()
         holdout = df_pred[self.specs.col_holdout].to_numpy()
 
         obs = self.eval.transformation(obs)

@@ -14,7 +14,8 @@ class ModelSpecs:
     col_holdout: str
     col_offset: str = "offset"
     col_weights: str = "weights"
-    col_pred: str = "pred"
+    col_eval_obs: str = "obs"
+    col_eval_pred: str = "pred"
     model_type: Type = model_type_dict["gaussian"]
     optimizer_options: Dict = field(default_factory=dict)
     model_param_name: str = field(init=False)
@@ -30,9 +31,12 @@ class ModelSpecs:
 
     @property
     def col_kept(self) -> Tuple[str, ...]:
-        col_kept = set(
-            (*self.col_id, self.col_holdout, self.col_obs, self.col_pred)
-        )
+        col_kept = set((
+            *self.col_id,
+            self.col_holdout,
+            self.col_eval_obs,
+            self.col_eval_pred
+        ))
         return tuple(col_kept)
 
 
