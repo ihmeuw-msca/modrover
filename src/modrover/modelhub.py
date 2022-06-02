@@ -63,7 +63,6 @@ class ModelHub:
     def _fit_model(self,
                    cov_ids: CovIDs,
                    df: Optional[DataFrame] = None) -> DataFrame:
-        sub_dir = self.get_sub_dir(cov_ids)
         if df is None:
             df = self.dataif.load_input(self.input_path.name)
             df = df[self.specs.col_holdout == 0].reset_index(drop=True)
@@ -82,7 +81,6 @@ class ModelHub:
             "sd": np.sqrt(np.diag(model.opt_vcov)),
         })
 
-        self.dataif.dump_output(df_coefs, sub_dir, "coefs.csv")
         return df_coefs
 
     def _get_eval_obs(self, df: DataFrame) -> ArrayLike:
@@ -106,29 +104,31 @@ class ModelHub:
         df_pred[self.specs.col_eval_obs] = self._get_eval_obs(df_pred)
         df_pred[self.specs.col_eval_pred] = self._get_eval_pred(df_pred)
         df_pred = df_pred[self.specs.col_kept].copy()
-        self.dataif.dump_output(df_pred, sub_dir, "result.parquet")
         return df_pred
 
     def _eval_model(self,
                     cov_ids: CovIDs,
-                    df_pred: Optional[DataFrame] = None) -> Dict:
+                    df_pred: Optional[DataFrame] = None,
+                    col_holdout: Optional[str] = None) -> Dict:
         sub_dir = self.get_sub_dir(cov_ids)
         if df_pred is None:
             df_pred = self.dataif.load_output(sub_dir, "result.parquet")
         obs = df_pred[self.specs.col_eval_obs].to_numpy()
         pred = df_pred[self.specs.col_eval_pred].to_numpy()
-        holdout = df_pred[self.specs.col_holdout].to_numpy()
-
-        indices = {
-            "insample": holdout == 0,
-            "outsample": holdout == 1,
-        }
-
-        performance = {
-            t: self.eval.metric(obs[indices[t]], pred[indices[t]])
-            for t in ["insample", "outsample"]
-        }
-        self.dataif.dump_output(performance, sub_dir, "performance.yaml")
+        if col_holdout is not None:
+            holdout = df_pred[col_holdout].to_numpy()
+            indices = {
+                "insample": holdout == 0,
+                "outsample": holdout == 1,
+            }
+            performance = {
+                t: self.eval.metric(obs[indices[t]], pred[indices[t]])
+                for t in ["insample", "outsample"]
+            }
+        else:
+            performance = {
+                "insample": self.eval.metric(obs, pred)
+            }
         return performance
 
     @staticmethod
@@ -144,16 +144,42 @@ class ModelHub:
         ]
         return all(f.exists() for f in outputs)
 
+    def _run_model(self, cov_ids: CovIDs, col_holdout: Optional[str] = None):
+        sub_dir = self.get_sub_dir(cov_ids)
+        df = self.dataif.load_input(self.input_path.name)
+        if col_holdout is not None:
+            df_train = df[df[col_holdout] == 0].reset_index(drop=True)
+            sub_dir = "/".join([sub_dir, col_holdout])
+        else:
+            df_train = df.copy()
+        df_coefs = self._fit_model(cov_ids, df_train)
+        if df_coefs is not None:
+            self.dataif.dump_output(df_coefs, sub_dir, "coefs.csv")
+            df_pred = self._predict_model(cov_ids, df, df_coefs)
+            self.dataif.dump_output(df_pred, sub_dir, "result.parquet")
+            performance = self._eval_model(cov_ids, df_pred, col_holdout=col_holdout)
+            self.dataif.dump_output(performance, sub_dir, "performance.yaml")
+
     def run_model(self, cov_ids: CovIDs):
         if self._has_ran(cov_ids):
             return
-        df = self.dataif.load_input(self.input_path.name)
-        df_train = df[df[self.specs.col_holdout] == 0].reset_index(drop=True)
-
-        df_coefs = self._fit_model(cov_ids, df_train)
-        if df_coefs is not None:
-            df_pred = self._predict_model(cov_ids, df, df_coefs)
-            self._eval_model(cov_ids, df_pred)
+        sub_dir = self.get_sub_dir(cov_ids)
+        # fit all the sub models for each holdout set
+        for col_holdout in self.specs.col_holdout:
+            self._run_model(cov_ids, col_holdout)
+        # fit the full model
+        self._run_model(cov_ids)
+        # compute average out-of-sample score
+        sub_dir_path = self.dataif.get_fpath(sub_dir, key="output")
+        oos_dirs = [
+            d.name for d in sub_dir_path.iterdir() if d.is_dir()
+        ]
+        performance = self.dataif.load_output(sub_dir, "performance.yaml")
+        performance["outsample"] = sum([
+            self.dataif.load_output(sub_dir, oos_dir, "performance.yaml")["outsample"]
+            for oos_dir in oos_dirs
+        ]) / len(oos_dirs)
+        self.dataif.dump_output(performance, sub_dir, "performance.yaml")
 
     def get_model_performance(self,
                               cov_ids: CovIDs,
