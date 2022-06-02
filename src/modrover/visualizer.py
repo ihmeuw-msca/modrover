@@ -92,16 +92,19 @@ def visualize(df_coefs: pd.DataFrame,
         ax[i].legend(loc="upper left", bbox_to_anchor=(1.10, 1), fontsize=9)
         num_present = df_synth.loc[cov, "num_present"]
         num_valid = df_synth.loc[cov, "num_valid"]
+        stats = "\n".join([
+            f"present = {num_present}/{model_counts['num_models']}",
+            f"valid = {num_valid}/{model_counts['num_models']}",
+            f"oospv_init = {np.mean(df_coefs.loc[indices['init'], 'outsample']):.3f}",
+            f"oospv_final = {np.mean(df_coefs.loc[indices['final'], 'outsample']):.3f}",
+            f"oospv_present = {float(df_coefs.loc[df_coefs[cov] != 0, 'outsample'].mean()):.3f}",
+            f"oospv_not_present = {float(df_coefs.loc[df_coefs[cov] == 0, 'outsample'].mean()):.3f}",
+            f"oospv_synth = {float(df_synth['outsample'][0]):.3f}",
+            f"used_model_pct = {float(df_synth['used_model_pct'][0]):.3f}",
+        ])
         ax[i].text(
             1.45, 0.92,
-            (f"present = {num_present}/{model_counts['num_models']}\n"
-             f"valid = {num_valid}/{model_counts['num_models']}\n"
-             f"oospv_init = {np.mean(df_coefs.loc[indices['init'], 'outsample']):.3f}\n"
-             f"oospv_final = {np.mean(df_coefs.loc[indices['final'], 'outsample']):.3f}\n"
-             f"oospv_present = {float(df_coefs.loc[df_coefs[cov] != 0, 'outsample'].mean()):.3f}\n"
-             f"oospv_not_present = {float(df_coefs.loc[df_coefs[cov] == 0, 'outsample'].mean()):.3f}\n"
-             f"oospv_synth = {float(df_synth['outsample'][0]):.3f}\n"
-             f"used_model_pct = {float(df_synth['used_model_pct'][0]):.3f}"),
+            stats,
             horizontalalignment='left',
             verticalalignment='top',
             transform=ax[i].transAxes,
