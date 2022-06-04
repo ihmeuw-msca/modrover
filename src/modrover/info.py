@@ -33,6 +33,7 @@ class ModelSpecs:
     def col_kept(self) -> Tuple[str, ...]:
         col_kept = set((
             *self.col_id,
+            *self.col_holdout,
             self.col_eval_obs,
             self.col_eval_pred
         ))
