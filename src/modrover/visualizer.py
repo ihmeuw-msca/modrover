@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,7 +14,7 @@ def _plot_synth(df_synth: pd.DataFrame,
                 **kwargs):
     ax.plot(
         [df_synth.loc[cov, "mean"]]*2,
-        [0, 1], label=f"{name}={df_synth.loc[cov, 'mean']:.2f}",
+        [0, 1], label=f"{name}_mean={df_synth.loc[cov, 'mean']:.2f}",
         **kwargs
     )
     ax.plot(
@@ -28,12 +28,11 @@ def _plot_synth(df_synth: pd.DataFrame,
 def visualize(df_coefs: pd.DataFrame,
               df_synth: pd.DataFrame,
               model_counts: Dict[str, int],
-              required_covs: Dict[str, int],
-              df_synth_valid: Optional[pd.DataFrame] = None):
+              required_covs: Dict[str, int]):
     np.random.seed(0)
     markers = {
-        "init": "^",
-        "final": "o",
+        "single": "^",
+        "all": "o",
     }
 
     # plot the coefficients
@@ -51,16 +50,14 @@ def visualize(df_coefs: pd.DataFrame,
     metrics = df_coefs["outsample"].to_numpy()
     vmin, vmax = metrics.min(), metrics.max()
     indices = {
-        "final": [
+        "all": [
             len(dir_name.split("_")) == (len(required_covs) + 1)
             for dir_name in df_coefs["dir_name"]
         ]
     }
     df_synth = df_synth.set_index("cov_name")
-    if df_synth_valid is not None:
-        df_synth_valid = df_synth_valid.set_index("cov_name")
     for i, cov in enumerate(required_covs):
-        indices["init"] = [
+        indices["single"] = [
             dir_name == f"0_{i + 1}"
             for dir_name in df_coefs["dir_name"]
         ]
@@ -83,25 +80,21 @@ def visualize(df_coefs: pd.DataFrame,
         cax = divider.append_axes('right', size='2%', pad=0.05)
         cbar = fig.colorbar(im, cax=cax, orientation='vertical')
         cbar.ax.set_yticks([vmin, vmax])
-        _plot_synth(df_synth, cov, "average", ax[i],
-                    color="#008080", linewidth=1)
-        if df_synth_valid is not None:
-            _plot_synth(df_synth_valid, cov, "average_valid", ax[i], y=0.55,
-                        color="red", linewidth=1)
+        _plot_synth(df_synth, cov, "result", ax[i], color="#008080", linewidth=1)
         ax[i].axvline(0, linewidth=1, color="grey", linestyle="--")
         ax[i].legend(loc="upper left", bbox_to_anchor=(1.10, 1), fontsize=9)
         num_present = df_synth.loc[cov, "num_present"]
-        num_valid = df_synth.loc[cov, "num_valid"]
+        stats = "\n".join([
+            f"present = {num_present}/{model_counts['num_models']}",
+            f"oospv_single = {np.mean(df_coefs.loc[indices['single'], 'outsample']):.3f}",
+            f"oospv_all = {np.mean(df_coefs.loc[indices['all'], 'outsample']):.3f}",
+            f"oospv_present = {float(df_coefs.loc[df_coefs[cov] != 0, 'outsample'].mean()):.3f}",
+            f"oospv_not_present = {float(df_coefs.loc[df_coefs[cov] == 0, 'outsample'].mean()):.3f}",
+            f"oospv_result = {float(df_synth['outsample'][0]):.3f}",
+        ])
         ax[i].text(
             1.45, 0.92,
-            (f"present = {num_present}/{model_counts['num_models']}\n"
-             f"valid = {num_valid}/{model_counts['num_models']}\n"
-             f"oospv_init = {np.mean(df_coefs.loc[indices['init'], 'outsample']):.3f}\n"
-             f"oospv_final = {np.mean(df_coefs.loc[indices['final'], 'outsample']):.3f}\n"
-             f"oospv_present = {float(df_coefs.loc[df_coefs[cov] != 0, 'outsample'].mean()):.3f}\n"
-             f"oospv_not_present = {float(df_coefs.loc[df_coefs[cov] == 0, 'outsample'].mean()):.3f}\n"
-             f"oospv_synth = {float(df_synth['outsample'][0]):.3f}\n"
-             f"used_model_pct = {float(df_synth['used_model_pct'][0]):.3f}"),
+            stats,
             horizontalalignment='left',
             verticalalignment='top',
             transform=ax[i].transAxes,

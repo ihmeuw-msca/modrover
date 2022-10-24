@@ -11,7 +11,7 @@ class ModelSpecs:
     col_obs: str
     col_fixed_covs: Tuple[str, ...]
     col_covs: Tuple[str, ...]
-    col_holdout: str
+    col_holdout: Tuple[str, ...]
     col_offset: str = "offset"
     col_weights: str = "weights"
     col_eval_obs: str = "obs"
@@ -33,7 +33,7 @@ class ModelSpecs:
     def col_kept(self) -> Tuple[str, ...]:
         col_kept = set((
             *self.col_id,
-            self.col_holdout,
+            *self.col_holdout,
             self.col_eval_obs,
             self.col_eval_pred
         ))
