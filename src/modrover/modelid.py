@@ -5,12 +5,12 @@ from typing import Optional, Tuple
 
 class ModelID:
 
-    def __init__(self, cov_ids: Tuple[int], num_covs: Optional[int] = None) -> None:
+    def __init__(self, cov_ids: Tuple[int, ...], num_covs: Optional[int] = None) -> None:
         self.cov_ids, self.num_covs = self._validate_covariate_ids(cov_ids, num_covs)
 
     def _validate_covariate_ids(
-            self, cov_ids: Tuple[int], num_covs: Optional[int]
-    ) -> Tuple[Tuple[int], int]:
+            self, cov_ids: Tuple[int, ...], num_covs: Optional[int] = None
+    ) -> Tuple[Tuple[int, ...], int]:
         """
         Validate the provided covariate_id set by the number of total covariates.
 
@@ -68,3 +68,9 @@ class ModelID:
 
     def __str__(self) -> str:
         return "_".join(map(str, self.cov_ids))
+
+    def __hash__(self) -> int:
+        return hash(self.cov_ids)
+
+    def __eq__(self, other) -> bool:
+        return hash(self) == hash(other)
