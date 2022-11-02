@@ -5,7 +5,7 @@ from regmod.data import Data
 from regmod.models import Model as RegmodModel
 from regmod.variable import Variable
 from pandas import DataFrame
-from typing import Optional
+from typing import Optional, Tuple
 
 from .info import ModelSpecs
 from .modelid import ModelID
@@ -18,19 +18,22 @@ class Model:
         self.performance: Optional[float] = None
 
         # Initialize the model
-        self._model: RegmodModel = self._initialize_model()
+        self._model: Optional[RegmodModel] = None
 
     @property
     def cov_ids(self) -> Tuple[int]:
         return self.model_id.cov_ids
 
     @property
-    def opt_coefs(self) -> Optional[np.array]:
-        return self._model.opt_coefs
+    def opt_coefs(self) -> Optional[np.ndarray]:
+        if self._model:
+            return self._model.opt_coefs
+        else:
+            return None
 
     @property
-    def vcov(self) -> Optional[np.array]:
-        if self.has_been_fit:
+    def vcov(self) -> Optional[np.ndarray]:
+        if self._model:
             return self._model.opt_vcov
         else:
             return None
@@ -43,13 +46,29 @@ class Model:
         """
         return self.opt_coefs is not None
 
-    def _initialize_model(self):
+    @property
+    def df_coefs(self) -> Optional[DataFrame]:
+        if not self.has_been_fit:
+            return None
+        # Is this full structure necessary? Or just the means?
+        data = DataFrame({
+            "cov_name": map(attrgetter("name"), self._model.params[0].variables),
+            "mean": self.opt_coefs,
+            "sd": np.sqrt(np.diag(self.opt_vcov))
+        })
+        return data
+
+    def _initialize_model(self, data: DataFrame) -> RegmodModel:
         """
         Initialize a regmod model based on the provided modelspecs.
         """
-        col_covs = [self.specs.col_covs[i - 1] for i in self.cov_ids]
+        if self._model:
+            # Return early if we've already initialized the model
+            return self._model
+        col_covs = [self.specs.col_covs[i] for i in self.cov_ids]
         col_covs = [*self.specs.col_fixed_covs, *col_covs]
         data = Data(
+            df=data,
             col_obs=self.specs.col_obs,
             col_covs=col_covs,
             col_offset=self.specs.col_offset,
@@ -65,6 +84,7 @@ class Model:
                 }
             }
         )
+        self._model = model
         return model
 
     def set_model_coefficients(self, opt_coefs: np.array) -> None:
@@ -77,14 +97,22 @@ class Model:
     def fit(self, data: DataFrame) -> None:
         if self.has_been_fit:
             return
-        self._model.attach_df(data)
-        mat = self._model.mat[0].to_numpy()
+
+        # We need to initialize the model with data, so delay initialization
+        # until we want to fit with some data
+        if not self._model:
+            self._initialize_model(data)
+
+        mat = self._model.mat[0]
         if np.linalg.matrix_rank(mat) < mat.shape[1]:
             warn(f"Singular design matrix {self.cov_ids=:}")
             return
 
         self._model.fit(**self.specs.optimizer_options)
 
-    def predict(self, data: DataFrame) -> DataFrame:
-        df_pred = self._model.predict(data)
-        return df_pred
+    def predict(self, data: DataFrame) -> np.ndarray:
+        if not self.has_been_fit:
+            warn("The model has not been fit yet, so returning empty array.")
+            return np.array([])
+
+        return self._model.get_params(self.opt_coefs)[0]
