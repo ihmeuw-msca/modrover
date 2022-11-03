@@ -50,12 +50,12 @@ class ModelID:
 
     @property
     def children(self) -> list["ModelID"]:
-        cov_ids = [
+        children = [
             self.create_modelid_set((*self.cov_ids, i), self.num_covs)
             for i in range(1, self.num_covs + 1)
             if i not in self.cov_ids
         ]
-        return cov_ids
+        return children
 
     @property
     def parents(self) -> list["ModelID"]:
