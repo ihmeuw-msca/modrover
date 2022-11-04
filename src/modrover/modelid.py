@@ -6,6 +6,8 @@ from typing import Optional, Tuple
 class ModelID:
 
     def __init__(self, cov_ids: Tuple[int, ...], num_covs: Optional[int] = None) -> None:
+        self.cov_ids: Tuple[int, ...]
+        self.num_covs: int
         self.cov_ids, self.num_covs = self._validate_covariate_ids(cov_ids, num_covs)
 
     def _validate_covariate_ids(
@@ -18,25 +20,28 @@ class ModelID:
         :param num_covs: Total number of covariates
         :return: Validated cov_ids and num_covs
         """
+        # Deduplicate cov_ids
+        cov_ids = set(cov_ids)
+        # Sort the covariate ids since we need them in a fixed order for mapping later
+        cov_ids = list(map(int, cov_ids))
+        cov_ids.sort()
+
         if num_covs is None:
             num_covs = max(cov_ids)
 
         num_covs = max(int(num_covs), 0)
 
-        # Sort the covariate ids since we need them in a fixed order for mapping later
-        cov_ids = list(map(int, cov_ids))
-        cov_ids.sort()
-
         if not all(map(lambda x: 0 <= x <= num_covs, cov_ids)):
             raise ValueError(f"covariate index is out of bounds")
 
         if 0 not in cov_ids:
+            # Intercept always a fixed covariate, present in all models
             cov_ids.insert(0, 0)
 
         return tuple(cov_ids), num_covs
 
     @classmethod
-    def create_modelid_set(
+    def _create_modelid(
             cls, cov_ids: Tuple[int], num_covs: Optional[int] = None
     ) -> ModelID:
         """
@@ -51,7 +56,10 @@ class ModelID:
     @property
     def children(self) -> list["ModelID"]:
         children = [
-            self.create_modelid_set((*self.cov_ids, i), self.num_covs)
+            self._create_modelid(
+                cov_ids=(*self.cov_ids, i),
+                num_covs=self.num_covs
+            )
             for i in range(1, self.num_covs + 1)
             if i not in self.cov_ids
         ]
@@ -60,8 +68,10 @@ class ModelID:
     @property
     def parents(self) -> list["ModelID"]:
         parents = [
-            self.create_modelid_set((*self.cov_ids[:i], *self.cov_ids[(i + 1):]),
-                                    num_covs=self.num_covs)
+            self._create_modelid(
+                cov_ids=(*self.cov_ids[:i], *self.cov_ids[(i + 1):]),
+                num_covs=self.num_covs
+            )
             for i in range(1, len(self.cov_ids))
         ]
         return parents
