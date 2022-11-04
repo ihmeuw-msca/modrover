@@ -10,15 +10,23 @@ from typing import Optional, Tuple
 from .info import ModelSpecs
 from .modelid import ModelID
 
+
 class Model:
 
-    def __init__(self, model_id: ModelID, specs: ModelSpecs):
+    def __init__(self, model_id: ModelID, model_type, col_covs: Dict[str, List], col_fixed: Dict[str, List],
+                 ):
+        # unpack specs, pass in arguments manually
         self.model_id = model_id
         self.specs = specs
         self.performance: Optional[float] = None
 
+        # Complication: Tobit model has 2 parameters, so multiple columns variable/multiple columns fixed,
+        # different per parameter
+        # For now, assume single parameter model only. Discuss how to extend later
+
         # Initialize the model
-        self._model: Optional[RegmodModel] = None
+        # Use regmod 0.0.8; model data no longer needed
+        self._model: Optional[RegmodModel] = model_type(*args, **kwargs)
 
     @property
     def cov_ids(self) -> Tuple[int]:
@@ -87,12 +95,13 @@ class Model:
         self._model = model
         return model
 
-    def set_model_coefficients(self, opt_coefs: np.array) -> None:
+    def set_model_coefficients(self, opt_coefs: np.ndarray, vcov: np.ndarray) -> None:
         """
         If we already have a set of coefficients for a model, e.g. saved to disk,
         set the coefficients on the model to prevent unnecessary fit calls.
         """
         self._model.opt_coefs = opt_coefs
+        self._model.opt_vcov = vcov
 
     def fit(self, data: DataFrame) -> None:
         if self.has_been_fit:

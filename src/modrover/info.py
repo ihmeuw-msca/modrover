@@ -7,6 +7,8 @@ from .globals import metric_dict, model_type_dict
 @dataclass
 class ModelSpecs:
 
+    # Might want to deprecate, just make these all explicity arguments
+
     col_id: Tuple[str, ...]
     col_obs: str
     col_fixed_covs: Tuple[str, ...]
