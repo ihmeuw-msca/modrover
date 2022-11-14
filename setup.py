@@ -37,6 +37,7 @@ if __name__ == "__main__":
         author_email=about["__email__"],
         package_dir={"": "src"},
         packages=find_packages(where="src"),
+        python_requires='>=3.10',
         include_package_data=True,
         install_requires=install_requirements,
         tests_require=test_requirements,
