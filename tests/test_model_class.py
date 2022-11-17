@@ -24,18 +24,6 @@ def dataset():
     return dataframe
 
 
-@pytest.fixture
-def model_specs():
-    specs = ModelSpecs(
-        col_id=['index'],
-        col_obs='y',
-        col_fixed_covs=['intercept'],
-        col_covs=['var_a', 'var_b', 'var_c', 'var_d', 'var_e'],
-        col_holdout=['holdout']
-    )
-    return specs
-
-
 def test_model_fit(dataset, model_specs):
     # Arbitrary: select first 3 covariates out of 5
     model_id = ModelID(cov_ids=(0, 1, 2), num_covs=5)

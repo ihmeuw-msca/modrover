@@ -6,11 +6,11 @@ from regmod.data import Data
 from regmod.models import Model as RegmodModel
 from regmod.variable import Variable
 from pandas import DataFrame
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
+from .globals import get_r2
 from .modelid import ModelID
 from .info import model_type_dict
-
 
 
 class Model:
@@ -27,6 +27,8 @@ class Model:
         col_weights: str = "weights",
         col_eval_obs: str = "obs",
         col_eval_pred: str = "pred",
+        model_param_name: str = "",
+        model_eval_metric: Callable = get_r2,
         optimizer_options: Optional[dict] = None,
     ) -> None:
         self.model_id = model_id
@@ -44,14 +46,49 @@ class Model:
             optimizer_options = {}
         self.optimizer_options = optimizer_options
 
-        self.performance: Optional[float] = None
+        # Initialize the model
+        self._model: RegmodModel = self._initialize_model()
 
         # For now, assume single parameter model only. Discuss how to extend later
         # Look at pogit model and /mnt/team/msca/priv/jira/MSCA-205 notebooks
         # think about how to extend prediction/validation cases
+        # Tobit example:
 
-        # Initialize the model
-        self._model: RegmodModel = self._initialize_model()
+        # data = Data(
+        #     col_obs='y_obs',
+        #     col_covs=[f"x1_{ii + 1}" for ii in range(cols - 1)] + [f"x2_{ii + 1}" for ii in
+        #                                                            range(cols - 1)],
+        #     df=df
+        # )
+        #
+        # variables1 = [Variable(f"x1_{ii + 1}") for ii in range(cols - 1)] + [
+        #     Variable('intercept')]
+        # variables2 = [Variable(f"x2_{ii + 1}") for ii in range(cols - 1)] + [
+        #     Variable('intercept')]
+        #
+        # model = TobitModel(
+        #     data=data,
+        #     param_specs={
+        #         'mu': {'variables': variables1},
+        #         'sigma': {'variables': variables2}
+        #     }
+        # )
+        #
+        # # Fit model
+        #
+        # model.fit()
+        # beta_est = model.opt_result.x[:cols]
+        # gamma_est = model.opt_result.x[cols:]
+
+        # Default to first model parameter name if not specified?
+        if not model_param_name:
+            model_param_name = self.model_class.param_names[0]
+        self.model_param_name = model_param_name
+        self.performance: Optional[float] = None
+
+        # Validate the callable better? Maybe just pass in a string instead and look for a
+        # scoring metric?
+        self.model_eval_metric = model_eval_metric
 
     @property
     def cov_ids(self) -> Tuple[int]:
@@ -107,6 +144,11 @@ class Model:
         if self._model:
             # Return early if we've already initialized the model
             return self._model
+
+        # multi param model: how to determine which variables are mapped to which
+        # parameters? Is there a way to prune the tree? Think about what the full
+        # rover tree should look like
+        # Given performance, what should the following child/parent models look like
         col_covs = [self.col_covs[i] for i in self.cov_ids]
         col_covs = [*self.col_fixed_covs, *col_covs]
         data = Data(
@@ -119,6 +161,7 @@ class Model:
         model = self.model_class(
             data,
             param_specs={
+                # Assumes single parameter structure for now
                 self.model_param_name: {
                     "variables": variables,
                     "use_offset": True,
@@ -154,7 +197,26 @@ class Model:
 
     def predict(self, data: DataFrame) -> np.ndarray:
         if not self.has_been_fit:
-            warn("The model has not been fit yet, so returning empty array.")
-            return np.array([])
+            raise RuntimeError("This model has not been fit yet, no coefficients "
+                               "to predict from")
 
-        return self._model.get_params(self.opt_coefs)[0]
+        return self._model.predict(data)
+
+    def cross_validate(self):
+        # Will need to think about how to do train/test splitting and what CV strategy to use.
+        # standard k-fold validation? what value of k to use?
+        # Any particular sampling strategy, just random?
+        return NotImplemented
+
+    def score(self, observed: np.ndarray, predicted: np.ndarray):
+        # TODO: pass in observed/predicted, or pass in a whole validation set?
+        if self.performance is None:
+            # First time evaluating performance, score based on the predictions and the
+            # scoring metric. If we've already scored just return the known number
+            self.performance = self.model_eval_metric(
+                obs=observed,
+                predicted=predicted
+            )
+
+        return self.performance
+
