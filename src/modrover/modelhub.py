@@ -12,7 +12,6 @@ from regmod.data import Data
 from regmod.models import Model
 from regmod.variable import Variable
 
-from .info import ModelEval, ModelSpecs
 from .model import Model
 from .modelid import ModelID
 from .types import CovIDs, CovIDsSet
@@ -24,13 +23,9 @@ class ModelHub:
         self,
         input_path: str | Path,
         output_dir: str | Path,
-        model_specs: ModelSpecs,
-        model_eval: ModelEval
     ):
         self.input_path = Path(input_path)
         self.output_dir = Path(output_dir)
-        self.specs = model_specs
-        self.eval = model_eval
         self.dataif = DataInterface(
             input=self.input_path.parent,
             output=self.output_dir

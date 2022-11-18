@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from operator import attrgetter
 from warnings import warn
 
@@ -6,11 +7,25 @@ from regmod.data import Data
 from regmod.models import Model as RegmodModel
 from regmod.variable import Variable
 from pandas import DataFrame
-from typing import Callable, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
-from .globals import get_r2
+from .globals import metric_dict
 from .modelid import ModelID
 from .info import model_type_dict
+
+@dataclass
+class Rover:
+
+    # Placeholder, to be fleshed out later and probably moved.
+    model_type: str
+    col_fixed: Dict[str, List]
+    # col_fixed keyed by parameter, ex.
+    # {
+    #     'mu': ['intercept'],
+    #     'sigma': []
+    # }
+    col_covs: List[str]  # All possible covariates we can explore over
+    col_obs: str
 
 
 class Model:
@@ -20,75 +35,64 @@ class Model:
         model_id: ModelID,
         model_type: str,
         col_obs: str,
-        col_covs: Tuple[str, ...],
-        col_fixed_covs: Tuple[str, ...],
-        col_holdout: Tuple[str, ...],
+        col_covs: List[str],
+        col_fixed: Dict[str, List],
         col_offset: str = "offset",
         col_weights: str = "weights",
         col_eval_obs: str = "obs",
         col_eval_pred: str = "pred",
-        model_param_name: str = "",
-        model_eval_metric: Callable = get_r2,
+        model_param_name: str = '',
+        model_eval_metric: str = 'r2',
         optimizer_options: Optional[dict] = None,
     ) -> None:
+        """
+        Initialize a Rover submodel
+
+        :param model_id: ModelID, represents the covariate indices to fit on
+        :param model_type: str, represents what type of model, e.g. gaussian, tobit, etc.
+        :param col_obs: str, which column is the target column to predict out
+        :param col_covs: List[str], all possible columns that rover can explore over
+        :param col_fixed: Dict[str, List], which columns are invariant keyed by model parameter
+        :param col_offset:
+        :param col_weights:
+        :param col_eval_obs:
+        :param col_eval_pred:
+        :param model_param_name:
+        :param model_eval_metric:
+        :param optimizer_options:
+        """
         self.model_id = model_id
         self.model_type = model_type
-        # For 2 parameter model: could be dict, or list of lists
-        self.col_obs = col_obs
-        self.col_covs = col_covs
-        self.col_fixed_covs = col_fixed_covs
-        self.col_holdout = col_holdout
-        self.col_offset = col_offset
-        self.col_weights = col_weights
+        # TODO: decide what to do with these parameters
         self.col_eval_obs = col_eval_obs
         self.col_eval_pred = col_eval_pred
         if optimizer_options is None:
             optimizer_options = {}
         self.optimizer_options = optimizer_options
 
-        # Initialize the model
-        self._model: RegmodModel = self._initialize_model()
-
-        # For now, assume single parameter model only. Discuss how to extend later
-        # Look at pogit model and /mnt/team/msca/priv/jira/MSCA-205 notebooks
-        # think about how to extend prediction/validation cases
-        # Tobit example:
-
-        # data = Data(
-        #     col_obs='y_obs',
-        #     col_covs=[f"x1_{ii + 1}" for ii in range(cols - 1)] + [f"x2_{ii + 1}" for ii in
-        #                                                            range(cols - 1)],
-        #     df=df
-        # )
-        #
-        # variables1 = [Variable(f"x1_{ii + 1}") for ii in range(cols - 1)] + [
-        #     Variable('intercept')]
-        # variables2 = [Variable(f"x2_{ii + 1}") for ii in range(cols - 1)] + [
-        #     Variable('intercept')]
-        #
-        # model = TobitModel(
-        #     data=data,
-        #     param_specs={
-        #         'mu': {'variables': variables1},
-        #         'sigma': {'variables': variables2}
-        #     }
-        # )
-        #
-        # # Fit model
-        #
-        # model.fit()
-        # beta_est = model.opt_result.x[:cols]
-        # gamma_est = model.opt_result.x[cols:]
-
-        # Default to first model parameter name if not specified?
+        # Default to first model parameter name if not specified
         if not model_param_name:
             model_param_name = self.model_class.param_names[0]
         self.model_param_name = model_param_name
+
+        # Initialize the model
+        self._model: Optional[RegmodModel] = None
+        self._initialize_model(
+            col_obs=col_obs,
+            col_covs=col_covs,
+            col_fixed=col_fixed,
+            col_offset=col_offset,
+            col_weights=col_weights,
+        )
+
         self.performance: Optional[float] = None
 
-        # Validate the callable better? Maybe just pass in a string instead and look for a
-        # scoring metric?
-        self.model_eval_metric = model_eval_metric
+        # select appropriate evaluation callable
+        try:
+            self.model_eval_metric = metric_dict[model_eval_metric]
+        except KeyError:
+            raise ValueError(f"Allowed values for evaluation "
+                             f"metric are {list(metric_dict.keys())}")
 
     @property
     def cov_ids(self) -> Tuple[int]:
@@ -137,7 +141,14 @@ class Model:
         })
         return data
 
-    def _initialize_model(self) -> RegmodModel:
+    def _initialize_model(
+        self,
+        col_obs: str,
+        col_covs: List[str],
+        col_fixed: Dict[str, List],
+        col_offset: str,
+        col_weights,
+    ) -> RegmodModel:
         """
         Initialize a regmod model based on the provided modelspecs.
         """
@@ -145,28 +156,47 @@ class Model:
             # Return early if we've already initialized the model
             return self._model
 
-        # multi param model: how to determine which variables are mapped to which
-        # parameters? Is there a way to prune the tree? Think about what the full
-        # rover tree should look like
-        # Given performance, what should the following child/parent models look like
-        col_covs = [self.col_covs[i] for i in self.cov_ids]
-        col_covs = [*self.col_fixed_covs, *col_covs]
+        # Validate that all parameters are represented
+        if not set(col_fixed.keys()) == set(self.model_class.param_names):
+            raise ValueError(
+                f"Mismatch between specified parameter names {set(col_fixed.keys())} "
+                f"and expected parameter names {set(self.model_class.param_names)}")
+
+        # Select the parameter-specific covariate columns
+        all_covariates = {col_covs[i - 1] for i in self.cov_ids if i > 0}
+
+        # Add on the fixed columns for every parameter
+        for parameter, columns in col_fixed.items():
+            for col in columns:
+                all_covariates.add(col)
+
         data = Data(
-            col_obs=self.col_obs,
-            col_covs=col_covs,
-            col_offset=self.col_offset,
-            col_weights=self.col_weights,
+            col_obs=col_obs,
+            col_covs=list(all_covariates),
+            col_offset=col_offset,
+            col_weights=col_weights,
         )
-        variables = [Variable(cov) for cov in col_covs]
-        model = self.model_class(
-            data,
-            param_specs={
-                # Assumes single parameter structure for now
-                self.model_param_name: {
-                    "variables": variables,
-                    "use_offset": True,
-                }
+
+        # Create regmod variables separately, by parameter
+        # Initialize with fixed parameters
+        # TODO: Does intercept get counted across multiple parameters?
+        regmod_variables = {
+            param_name: {
+                'variables': [Variable(cov) for cov in covariates]
             }
+            for param_name, covariates in col_fixed.items()
+        }
+
+        # Add the remaining columns specific to this model
+        for cov_id in self.cov_ids:
+            if cov_id > 0:
+                regmod_variables[self.model_param_name]['variables'].append(
+                    Variable(col_covs[cov_id - 1])
+                )
+
+        model = self.model_class(
+            data=data,
+            param_specs=regmod_variables
         )
         self._model = model
         return model
@@ -219,4 +249,23 @@ class Model:
             )
 
         return self.performance
+
+# y    sdi   ldi   vac
+#
+#
+# Rover(dataset, col_fixed={'mu': ['intercept'], 'sigma': ['intercept', 'vac']},
+#       col_cov=['sdi', 'ldi'], parameter_to_explore='mu')
+#
+# Base Model -> Model
+#
+#
+# Model._model: RegmodModel
+#
+# RegmodModel(
+#
+#     param_specs={
+#         parameter_to_explore: [],
+#         key: value for key, val in col_fixed
+#     }
+# )
 
