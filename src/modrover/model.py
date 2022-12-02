@@ -43,7 +43,6 @@ class Model:
         col_weights: str = "weights",
         model_param_name: str = '',
         model_eval_metric: Callable = get_r2,
-        optimizer_options: Optional[dict] = None,
     ) -> None:
         """
         Initialize a Rover submodel
@@ -61,29 +60,23 @@ class Model:
         """
         self.model_id = model_id
         self.model_type = model_type
-        if optimizer_options is None:
-            optimizer_options = {}
-        self.optimizer_options = optimizer_options
+
+        # TODO: Should these be parameters to fit, or instance attributes?
+        self.col_obs = col_obs
+        self.col_covs = col_covs,
+        self.col_fixed = col_fixed
+        self.col_offset = col_offset
+        self.col_weights = col_weights
+        self.model_eval_metric = model_eval_metric
 
         # Default to first model parameter name if not specified
         if not model_param_name:
             model_param_name = self.model_class.param_names[0]
         self.model_param_name = model_param_name
 
-        # Initialize the model
+        # Initialize null model
         self._model: Optional[RegmodModel] = None
-        self._initialize_model(
-            col_obs=col_obs,
-            col_covs=col_covs,
-            col_fixed=col_fixed,
-            col_offset=col_offset,
-            col_weights=col_weights,
-        )
-
         self.performance: Optional[float] = None
-
-        # select appropriate evaluation callable
-        self.model_eval_metric = model_eval_metric
 
     @property
     def cov_ids(self) -> Tuple[int]:
@@ -115,10 +108,9 @@ class Model:
     @property
     def has_been_fit(self) -> bool:
         """
-        Check if our model has already been fit by checking for the existence of
-        coefficients.
+        Check if our fit method has been called, by checking whether the model is null.
         """
-        return self.opt_coefs is not None
+        return self._model is not None
 
     @property
     def df_coefs(self) -> Optional[DataFrame]:
@@ -134,40 +126,30 @@ class Model:
         })
         return data
 
-    def _initialize_model(
-        self,
-        col_obs: str,
-        col_covs: List[str],
-        col_fixed: Dict[str, List],
-        col_offset: str,
-        col_weights,
-    ) -> RegmodModel:
+    def _initialize_model(self) -> RegmodModel:
         """
         Initialize a regmod model based on the provided modelspecs.
         """
-        if self._model:
-            # Return early if we've already initialized the model
-            return self._model
 
         # Validate that all parameters are represented
-        if not set(col_fixed.keys()) == set(self.model_class.param_names):
+        if not set(self.col_fixed.keys()) == set(self.model_class.param_names):
             raise ValueError(
-                f"Mismatch between specified parameter names {set(col_fixed.keys())} "
+                f"Mismatch between specified parameter names {set(self.col_fixed.keys())} "
                 f"and expected parameter names {set(self.model_class.param_names)}")
 
         # Select the parameter-specific covariate columns
-        all_covariates = {col_covs[i - 1] for i in self.cov_ids if i > 0}
+        all_covariates = {self.col_covs[i - 1] for i in self.cov_ids if i > 0}
 
         # Add on the fixed columns for every parameter
-        for parameter, columns in col_fixed.items():
+        for parameter, columns in self.col_fixed.items():
             for col in columns:
                 all_covariates.add(col)
 
         data = Data(
-            col_obs=col_obs,
+            col_obs=self.col_obs,
             col_covs=list(all_covariates),
-            col_offset=col_offset,
-            col_weights=col_weights,
+            col_offset=self.col_offset,
+            col_weights=self.col_weights,
         )
 
         # Create regmod variables separately, by parameter
@@ -177,14 +159,14 @@ class Model:
             param_name: {
                 'variables': [Variable(cov) for cov in covariates]
             }
-            for param_name, covariates in col_fixed.items()
+            for param_name, covariates in self.col_fixed.items()
         }
 
         # Add the remaining columns specific to this model
         for cov_id in self.cov_ids:
             if cov_id > 0:
                 regmod_variables[self.model_param_name]['variables'].append(
-                    Variable(col_covs[cov_id - 1])
+                    Variable(self.col_covs[cov_id - 1])
                 )
 
         model = self.model_class(
@@ -204,62 +186,87 @@ class Model:
         # calculable from the opt_coefs. Plus, not settable anyways since vcov is a property
         # self._model.opt_vcov = vcov
 
-    def fit(self, data):
-        for col in self.col_holdout:
+    def fit(
+        self,
+        data: DataFrame,
+        holdout_cols: Optional[List[str]] = None,
+        **optimizer_options
+    ):
+        """
+        Fit a set of models on a series of holdout datasets.
+
+        This method will fit a model over k folds of the dataset, where k is the length
+        of the provided holdout_cols list. It is up to the user to decide the train-test
+        splits for each holdout col.
+
+        On each fold of the dataset, the trained model will predict out on the validation set
+        and obtain a score. The averaged score across all folds becomes the model's overall
+        performance.
+
+        Finally, a model is trained with all data in order to generate the final coefficients.
+
+        :param data:
+        :param holdout_cols:
+        :return:
+        """
+        if self.performance:
+            # Model already has been fit, exit early
+            return
+
+        if not holdout_cols:
+            # How to get CV performance without any holdouts? Just score all-data model?
+            raise ValueError
+
+        performance = 0.
+        for col in holdout_cols:
             model = self._initialize_model()
-            self._fit(model, subset(data))
-            self.score += self.score(model, subset(data))
-        self.score /= len(self.col_holdout)
-        model = self._initialize_model()
-        self._fit(model, data)
-        self.coefs = model.opt_coefs
+            # Subset the data
+            train_set = data.loc[data[col] == 0]
+            test_set = data.loc[data[col] == 1]
+            self._fit(train_set, model)
+            performance += self.score(test_set, model)
+        performance /= len(holdout_cols)  # Divide by k to get an average
 
+        # Fit final model with all data included
+        self._model = self._initialize_model()
+        self._fit(data, self._model)
 
-    def _fit(self, data: DataFrame) -> None:
+    def _fit(self, data: DataFrame, model: RegmodModel, **optimizer_options) -> None:
         if self.has_been_fit:
             return
 
-        # Only regmod 0.0.8+
-        for col in self.col_holdout:
+        model.attach_df(data)
 
-            data = data.loc[data.col == 0]
+        mat = model.mat[0]
+        if np.linalg.matrix_rank(mat) < mat.shape[1]:
+            warn(f"Singular design matrix {self.cov_ids=:}")
+            return
 
-            self._model.attach_df(data)
+        model.fit(**optimizer_options)
 
-            mat = self._model.mat[0]
-            if np.linalg.matrix_rank(mat) < mat.shape[1]:
-                warn(f"Singular design matrix {self.cov_ids=:}")
-                return
+    def score(self, test_set: DataFrame, model: Optional[RegmodModel] = None) -> float:
+        """
+        Given a model and a test set, generate an aggregate score.
 
-            self._model.fit(**self.optimizer_options)
-            self.predict(self._model, data.loc[data.col == 1])
-            self.update_score()
+        Score is based on the provided evaluation metric, comparing the difference between
+        observed and predicted values.
 
+        :param test_set: The holdout test set to generate predictions from
+        :param model: The fitted model to set predictions on
+        :return: a score
+        """
 
-    def predict(self, data: DataFrame) -> np.ndarray:
-        if not self.has_been_fit:
-            raise RuntimeError("This model has not been fit yet, no coefficients "
-                               "to predict from")
+        if model is None:
+            model = self._model
 
-        return self._model.predict(data)
+        predicted = model.predict(test_set)
+        observed = test_set[self.col_obs]
+        performance = self.model_eval_metric(
+            obs=observed,
+            predicted=predicted
+        )
 
-    def cross_validate(self):
-        # Will need to think about how to do train/test splitting and what CV strategy to use.
-        # standard k-fold validation? what value of k to use?
-        # Any particular sampling strategy, just random?
-        return NotImplemented
-
-    def score(self, observed: np.ndarray, predicted: np.ndarray):
-        # TODO: pass in observed/predicted, or pass in a whole validation set?
-        if self.performance is None:
-            # First time evaluating performance, score based on the predictions and the
-            # scoring metric. If we've already scored just return the known number
-            self.performance = self.model_eval_metric(
-                obs=observed,
-                predicted=predicted
-            )
-
-        return self.performance
+        return performance
 
 # y    sdi   ldi   vac
 #
