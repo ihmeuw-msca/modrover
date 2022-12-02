@@ -12,7 +12,8 @@ from regmod.data import Data
 from regmod.models import Model
 from regmod.variable import Variable
 
-from .info import ModelEval, ModelSpecs
+from .model import Model
+from .modelid import ModelID
 from .types import CovIDs, CovIDsSet
 
 
@@ -22,42 +23,21 @@ class ModelHub:
         self,
         input_path: str | Path,
         output_dir: str | Path,
-        model_specs: ModelSpecs,
-        model_eval: ModelEval
     ):
         self.input_path = Path(input_path)
         self.output_dir = Path(output_dir)
-        self.specs = model_specs
-        self.eval = model_eval
         self.dataif = DataInterface(
             input=self.input_path.parent,
             output=self.output_dir
         )
 
-    def _get_model(self,
-                   cov_ids: CovIDs,
-                   df_coefs: Optional[DataFrame] = None) -> Model:
-        col_covs = [self.specs.col_covs[i - 1] for i in cov_ids]
-        col_covs = [*self.specs.col_fixed_covs, *col_covs]
-        data = Data(
-            col_obs=self.specs.col_obs,
-            col_covs=col_covs,
-            col_offset=self.specs.col_offset,
-            col_weights=self.specs.col_weights,
-        )
-        variables = [Variable(cov) for cov in col_covs]
-        model = self.specs.model_type(
-            data,
-            param_specs={
-                self.specs.model_param_name: {
-                    "variables": variables,
-                    "use_offset": True,
-                }
-            }
-        )
-        if df_coefs is not None:
-            df_coefs = df_coefs.set_index("cov_name")
-            model.opt_coefs = df_coefs.loc[col_covs, "mean"].to_numpy()
+    def _get_model(
+            self, model_id: ModelID,
+            previous_coefficients: Optional[np.array] = None
+    ) -> Model:
+        model = Model(model_id, self.specs)
+        if previous_coefficients:
+            model.set_model_coefficients(previous_coefficients)
         return model
 
     def _fit_model(self,
@@ -68,20 +48,7 @@ class ModelHub:
             df = df[self.specs.col_holdout == 0].reset_index(drop=True)
 
         model = self._get_model(cov_ids)
-        model.attach_df(df)
-        mat = model.mat[0].to_numpy()
-        if np.linalg.matrix_rank(mat) < mat.shape[1]:
-            warn(f"Singular design matrix {cov_ids=:}")
-            return
-        model.fit(**self.specs.optimizer_options)
-
-        df_coefs = DataFrame({
-            "cov_name": map(attrgetter("name"), model.params[0].variables),
-            "mean": model.opt_coefs,
-            "sd": np.sqrt(np.diag(model.opt_vcov)),
-        })
-
-        return df_coefs
+        model.fit(df)
 
     def _get_eval_obs(self, df: DataFrame) -> ArrayLike:
         return df[self.specs.col_obs]
@@ -152,10 +119,11 @@ class ModelHub:
             sub_dir = "/".join([sub_dir, col_holdout])
         else:
             df_train = df.copy()
-        df_coefs = self._fit_model(cov_ids, df_train)
+        self._fit_model(cov_ids, df_train)
+        df_coefs = model.df_coefs
         if df_coefs is not None:
             self.dataif.dump_output(df_coefs, sub_dir, "coefs.csv")
-            df_pred = self._predict_model(cov_ids, df, df_coefs)
+            df_pred = model.predict(cov_ids, df, df_coefs)
             self.dataif.dump_output(df_pred, sub_dir, "result.parquet")
             performance = self._eval_model(cov_ids, df_pred, col_holdout=col_holdout)
             self.dataif.dump_output(performance, sub_dir, "performance.yaml")
