@@ -204,19 +204,37 @@ class Model:
         # calculable from the opt_coefs. Plus, not settable anyways since vcov is a property
         # self._model.opt_vcov = vcov
 
-    def fit(self, data: DataFrame) -> None:
+    def fit(self, data):
+        for col in self.col_holdout:
+            model = self._initialize_model()
+            self._fit(model, subset(data))
+            self.score += self.score(model, subset(data))
+        self.score /= len(self.col_holdout)
+        model = self._initialize_model()
+        self._fit(model, data)
+        self.coefs = model.opt_coefs
+
+
+    def _fit(self, data: DataFrame) -> None:
         if self.has_been_fit:
             return
 
         # Only regmod 0.0.8+
-        self._model.attach_df(data)
+        for col in self.col_holdout:
 
-        mat = self._model.mat[0]
-        if np.linalg.matrix_rank(mat) < mat.shape[1]:
-            warn(f"Singular design matrix {self.cov_ids=:}")
-            return
+            data = data.loc[data.col == 0]
 
-        self._model.fit(**self.optimizer_options)
+            self._model.attach_df(data)
+
+            mat = self._model.mat[0]
+            if np.linalg.matrix_rank(mat) < mat.shape[1]:
+                warn(f"Singular design matrix {self.cov_ids=:}")
+                return
+
+            self._model.fit(**self.optimizer_options)
+            self.predict(self._model, data.loc[data.col == 1])
+            self.update_score()
+
 
     def predict(self, data: DataFrame) -> np.ndarray:
         if not self.has_been_fit:
