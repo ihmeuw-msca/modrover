@@ -7,9 +7,9 @@ from regmod.data import Data
 from regmod.models import Model as RegmodModel
 from regmod.variable import Variable
 from pandas import DataFrame
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
-from .globals import metric_dict
+from .globals import get_r2
 from .modelid import ModelID
 from .info import model_type_dict
 
@@ -26,6 +26,7 @@ class Rover:
     # }
     col_covs: List[str]  # All possible covariates we can explore over
     col_obs: str
+    model_eval_metric: str
 
 
 class Model:
@@ -37,12 +38,11 @@ class Model:
         col_obs: str,
         col_covs: List[str],
         col_fixed: Dict[str, List],
+        # TODO: make col_offset a dictionary for 2 parameter model
         col_offset: str = "offset",
         col_weights: str = "weights",
-        col_eval_obs: str = "obs",
-        col_eval_pred: str = "pred",
         model_param_name: str = '',
-        model_eval_metric: str = 'r2',
+        model_eval_metric: Callable = get_r2,
         optimizer_options: Optional[dict] = None,
     ) -> None:
         """
@@ -55,17 +55,12 @@ class Model:
         :param col_fixed: Dict[str, List], which columns are invariant keyed by model parameter
         :param col_offset:
         :param col_weights:
-        :param col_eval_obs:
-        :param col_eval_pred:
         :param model_param_name:
         :param model_eval_metric:
         :param optimizer_options:
         """
         self.model_id = model_id
         self.model_type = model_type
-        # TODO: decide what to do with these parameters
-        self.col_eval_obs = col_eval_obs
-        self.col_eval_pred = col_eval_pred
         if optimizer_options is None:
             optimizer_options = {}
         self.optimizer_options = optimizer_options
@@ -88,11 +83,7 @@ class Model:
         self.performance: Optional[float] = None
 
         # select appropriate evaluation callable
-        try:
-            self.model_eval_metric = metric_dict[model_eval_metric]
-        except KeyError:
-            raise ValueError(f"Allowed values for evaluation "
-                             f"metric are {list(metric_dict.keys())}")
+        self.model_eval_metric = model_eval_metric
 
     @property
     def cov_ids(self) -> Tuple[int]:
@@ -133,6 +124,8 @@ class Model:
     def df_coefs(self) -> Optional[DataFrame]:
         if not self.has_been_fit:
             return None
+        # TODO: Update this datastructure to be flexible with multiple parameters.
+        # Should reflect final all-data model, perhaps prefix with parameter name
         # Is this full structure necessary? Or just the means?
         data = DataFrame({
             "cov_name": map(attrgetter("name"), self._model.params[0].variables),
