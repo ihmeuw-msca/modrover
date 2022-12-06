@@ -63,7 +63,7 @@ class Model:
 
         # TODO: Should these be parameters to fit, or instance attributes?
         self.col_obs = col_obs
-        self.col_covs = col_covs,
+        self.col_covs = col_covs
         self.col_fixed = col_fixed
         self.col_offset = col_offset
         self.col_weights = col_weights
@@ -110,11 +110,11 @@ class Model:
         """
         Check if our fit method has been called, by checking whether the model is null.
         """
-        return self._model is not None
+        return self.opt_coefs is not None
 
     @property
     def df_coefs(self) -> Optional[DataFrame]:
-        if not self.has_been_fit:
+        if not self.opt_coefs:
             return None
         # TODO: Update this datastructure to be flexible with multiple parameters.
         # Should reflect final all-data model, perhaps prefix with parameter name
@@ -197,7 +197,7 @@ class Model:
 
         This method will fit a model over k folds of the dataset, where k is the length
         of the provided holdout_cols list. It is up to the user to decide the train-test
-        splits for each holdout col.
+        splits for each holdout column.
 
         On each fold of the dataset, the trained model will predict out on the validation set
         and obtain a score. The averaged score across all folds becomes the model's overall
@@ -213,27 +213,35 @@ class Model:
             # Model already has been fit, exit early
             return
 
-        if not holdout_cols:
-            # How to get CV performance without any holdouts? Just score all-data model?
-            raise ValueError
+        if holdout_cols:
 
-        performance = 0.
-        for col in holdout_cols:
-            model = self._initialize_model()
-            # Subset the data
-            train_set = data.loc[data[col] == 0]
-            test_set = data.loc[data[col] == 1]
-            self._fit(train_set, model)
-            performance += self.score(test_set, model)
-        performance /= len(holdout_cols)  # Divide by k to get an average
+            performance = 0.
+            for col in holdout_cols:
+                model = self._initialize_model()
+                # Subset the data
+                train_set = data.loc[data[col] == 0]
+                test_set = data.loc[data[col] == 1]
+                self._fit(model, train_set, **optimizer_options)
+                # Note: since we are passing a slice of the original data to the scoring
+                # function, and since regmod.predict modifies the input data, we will raise
+                # SettingWithCopyWarnings here.
+
+                # The ideal implementation is that regmod.predict returns the predictions
+                # of interest rather than modifying the input data, to avoid these warnings.
+                performance += self.score(test_set, model)
+            performance /= len(holdout_cols)  # Divide by k to get an unweighted average
+        else:
+            # How to get CV performance without any holdouts? Just score all-data model?
+            performance = 0.
+
+        # Model performance is average performance across each k fold
+        self.performance = performance
 
         # Fit final model with all data included
         self._model = self._initialize_model()
-        self._fit(data, self._model)
+        self._fit(self._model, data, **optimizer_options)
 
-    def _fit(self, data: DataFrame, model: RegmodModel, **optimizer_options) -> None:
-        if self.has_been_fit:
-            return
+    def _fit(self, model: RegmodModel, data: DataFrame, **optimizer_options) -> None:
 
         model.attach_df(data)
 
@@ -243,6 +251,26 @@ class Model:
             return
 
         model.fit(**optimizer_options)
+
+    def predict(self, model: RegmodModel, test_set: DataFrame) -> Dict[str, np.ndarray]:
+        """
+        Override regmod's predict method to avoid modifying input dataset.
+
+        Can be removed if regmod models use a functionally pure predict function, otherwise
+        we will raise SettingWithCopyWarnings repeatedly.
+
+        :param model: a fitted RegmodModel
+        :param test_set: a dataset to generate predictions from
+        :return: a dictionary mapping parameter names to predictions
+        """
+        split_coefficients = model.split_coefs(model.opt_coefs)
+        data = model.data
+        data.attach_df(test_set)
+        predictions = {}
+        for coefficients, param in zip(split_coefficients, model.params):
+            preds = param.get_param(coefficients, data)
+            predictions[param.name] = preds
+        return predictions
 
     def score(self, test_set: DataFrame, model: Optional[RegmodModel] = None) -> float:
         """
@@ -259,12 +287,16 @@ class Model:
         if model is None:
             model = self._model
 
-        predicted = model.predict(test_set)
+        # Predict modifies the test set
+        preds = self.predict(model, test_set)
         observed = test_set[self.col_obs]
         performance = self.model_eval_metric(
-            obs=observed,
-            predicted=predicted
+            obs=observed.array,
+            # Score only the parameter of interest
+            pred=preds[self.model_param_name]
         )
+        # Clear out attached dataframe from the model object
+        model.data.detach_df()
 
         return performance
 

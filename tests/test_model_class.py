@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+
 @pytest.fixture
 def dataset():
     data = np.random.randn(25, 6)
@@ -16,8 +17,10 @@ def dataset():
         'var_e',
         'y']
     dataframe = pd.DataFrame(data, columns=columns)
-    # Fill in intercept
+    # Fill in intercept and holdout columns
     dataframe['intercept'] = 1
+    dataframe['holdout_1'] = np.random.randint(0, 2, 25)
+    dataframe['holdout_2'] = np.random.randint(0, 2, 25)
     return dataframe
 
 
@@ -44,11 +47,12 @@ def test_model_init(dataset, model_specs):
     assert model.model_param_name == 'mu'
 
     # Only a and b are selected for this model
-    assert set(model._model.data.col_covs) == \
+    regmod_model = model._initialize_model()
+    assert set(regmod_model.data.col_covs) == \
            {'var_a', 'var_b', 'intercept'}
 
     # Should have 7 columns. y column, intercept, 2 covariates, weights, offset, trim
-    assert model._model.data.df.shape == (0, 7)
+    assert regmod_model.data.df.shape == (0, 7)
 
 
 def test_model_fit(dataset, model_specs):
@@ -57,13 +61,11 @@ def test_model_fit(dataset, model_specs):
     model = Model(model_id=model_id, **model_specs)
 
     # Fit the model, don't check for correctness
-    model.fit(dataset)
-    assert model.has_been_fit
+    model.fit(dataset, holdout_cols=['holdout_1', 'holdout_2'])
+    assert 0 <= model.performance <= 1
+    assert model.opt_coefs is not None
     assert isinstance(model.opt_coefs, np.ndarray)
     assert isinstance(model.vcov, np.ndarray)
-
-    preds = model.predict(dataset)
-    assert isinstance(preds, pd.DataFrame)
 
 
 def test_two_param_model_fit(dataset):
@@ -85,15 +87,13 @@ def test_two_param_model_fit(dataset):
     )
 
     # Should have 2 mu columns, 2 sigma columns, and the intercept
-    assert set(model._model.data.col_covs) == {'var_a', 'var_b', 'var_d', 'var_e', 'intercept'}
+    regmod_model = model._initialize_model()
+    assert set(regmod_model.data.col_covs) == {'var_a', 'var_b', 'var_d', 'var_e', 'intercept'}
 
     # TODO: check the data dimensions. If we want to fit a model on a/b/d/e,
     # should we see column C in the result?
-    model.fit(dataset)
-
-    preds = model.predict(dataset)
-    assert isinstance(preds, pd.DataFrame)
-
-
-
-
+    model.fit(dataset, holdout_cols=['holdout_1', 'holdout_2'])
+    assert 0 <= model.performance <= 1
+    assert model.opt_coefs is not None
+    assert isinstance(model.opt_coefs, np.ndarray)
+    assert isinstance(model.vcov, np.ndarray)
