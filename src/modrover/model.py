@@ -222,12 +222,6 @@ class Model:
                 train_set = data.loc[data[col] == 0]
                 test_set = data.loc[data[col] == 1]
                 self._fit(model, train_set, **optimizer_options)
-                # Note: since we are passing a slice of the original data to the scoring
-                # function, and since regmod.predict modifies the input data, we will raise
-                # SettingWithCopyWarnings here.
-
-                # The ideal implementation is that regmod.predict returns the predictions
-                # of interest rather than modifying the input data, to avoid these warnings.
                 performance += self.score(test_set, model)
             performance /= len(holdout_cols)  # Divide by k to get an unweighted average
         else:
@@ -252,25 +246,28 @@ class Model:
 
         model.fit(**optimizer_options)
 
-    def predict(self, model: RegmodModel, test_set: DataFrame) -> Dict[str, np.ndarray]:
+    def predict(self, model: RegmodModel, test_set: DataFrame) -> np.ndarray:
         """
-        Override regmod's predict method to avoid modifying input dataset.
+        Wraps regmod's predict method to avoid modifying input dataset.
 
         Can be removed if regmod models use a functionally pure predict function, otherwise
         we will raise SettingWithCopyWarnings repeatedly.
 
         :param model: a fitted RegmodModel
         :param test_set: a dataset to generate predictions from
-        :return: a dictionary mapping parameter names to predictions
+        :return: an array of predictions for the model parameter of interest
         """
         split_coefficients = model.split_coefs(model.opt_coefs)
+        # Select the index of the parameter of interest
+        index = model.param_names.index(self.model_param_name)
+        coefficients = split_coefficients[index]
+        parameter = model.params[index]
+
         data = model.data
         data.attach_df(test_set)
-        predictions = {}
-        for coefficients, param in zip(split_coefficients, model.params):
-            preds = param.get_param(coefficients, data)
-            predictions[param.name] = preds
-        return predictions
+
+        preds = parameter.get_param(coefficients, data)
+        return preds
 
     def score(self, test_set: DataFrame, model: Optional[RegmodModel] = None) -> float:
         """
@@ -287,13 +284,11 @@ class Model:
         if model is None:
             model = self._model
 
-        # Predict modifies the test set
         preds = self.predict(model, test_set)
         observed = test_set[self.col_obs]
         performance = self.model_eval_metric(
             obs=observed.array,
-            # Score only the parameter of interest
-            pred=preds[self.model_param_name]
+            pred=preds,
         )
         # Clear out attached dataframe from the model object
         model.data.detach_df()
