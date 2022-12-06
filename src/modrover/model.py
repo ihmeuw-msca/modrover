@@ -205,8 +205,8 @@ class Model:
 
         Finally, a model is trained with all data in order to generate the final coefficients.
 
-        :param data:
-        :param holdout_cols:
+        :param data: a dataframe containing the training data
+        :param holdout_cols: which column names to iterate over for cross validation
         :return:
         """
         if self.performance:
@@ -278,7 +278,7 @@ class Model:
 
         :param test_set: The holdout test set to generate predictions from
         :param model: The fitted model to set predictions on
-        :return: a score
+        :return: a score determined by the provided model evaluation metric
         """
 
         if model is None:
