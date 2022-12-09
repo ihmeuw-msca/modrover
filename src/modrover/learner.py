@@ -9,7 +9,7 @@ from regmod.variable import Variable
 from pandas import DataFrame
 from typing import Callable, Dict, List, Optional, Tuple
 
-from .globals import get_r2
+from .globals import get_rmse
 from .modelid import ModelID
 from .info import model_type_dict
 
@@ -29,7 +29,7 @@ class Rover:
     model_eval_metric: str
 
 
-class Model:
+class Learner:
 
     def __init__(
         self,
@@ -42,7 +42,8 @@ class Model:
         col_offset: str = "offset",
         col_weights: str = "weights",
         model_param_name: str = '',
-        model_eval_metric: Callable = get_r2,
+        # RMSE a better default metric
+        model_eval_metric: Callable = get_rmse,
     ) -> None:
         """
         Initialize a Rover submodel
@@ -88,6 +89,12 @@ class Model:
             return self._model.opt_coefs
         else:
             return None
+
+    @opt_coefs.setter
+    def opt_coefs(self, opt_coefs: np.ndarray):
+        if not self._model:
+            self._model = self._initialize_model()
+        self._model.opt_coefs = opt_coefs
 
     @property
     def model_class(self):
@@ -137,6 +144,7 @@ class Model:
                 f"Mismatch between specified parameter names {set(self.col_fixed.keys())} "
                 f"and expected parameter names {set(self.model_class.param_names)}")
 
+        # TODO: Column selection logic should live in the rover class, move out of here
         # Select the parameter-specific covariate columns
         all_covariates = {self.col_covs[i - 1] for i in self.cov_ids if i > 0}
 
@@ -176,16 +184,6 @@ class Model:
         self._model = model
         return model
 
-    def set_model_coefficients(self, opt_coefs: np.ndarray, vcov: np.ndarray) -> None:
-        """
-        If we already have a set of coefficients for a model, e.g. saved to disk,
-        set the coefficients on the model to prevent unnecessary fit calls.
-        """
-        self._model.opt_coefs = opt_coefs
-        # Still unsure why vcov is necessary to set. From regmod code seems vcov is entirely
-        # calculable from the opt_coefs. Plus, not settable anyways since vcov is a property
-        # self._model.opt_vcov = vcov
-
     def fit(
         self,
         data: DataFrame,
@@ -210,11 +208,11 @@ class Model:
         :return:
         """
         if self.performance:
-            # Model already has been fit, exit early
+            # Learner already has been fit, exit early
             return
 
         if holdout_cols:
-
+            # If holdout cols are provided, loop through to calculate OOS performance
             performance = 0.
             for col in holdout_cols:
                 model = self._initialize_model()
@@ -224,16 +222,17 @@ class Model:
                 self._fit(model, train_set, **optimizer_options)
                 performance += self.score(test_set, model)
             performance /= len(holdout_cols)  # Divide by k to get an unweighted average
-        else:
-            # How to get CV performance without any holdouts? Just score all-data model?
-            performance = 0.
 
-        # Model performance is average performance across each k fold
-        self.performance = performance
+            # Learner performance is average performance across each k fold
+            self.performance = performance
 
         # Fit final model with all data included
         self._model = self._initialize_model()
         self._fit(self._model, data, **optimizer_options)
+
+        # If holdout cols not provided, use in sample score for the full data model
+        if not holdout_cols:
+            self.performance = self.score(data, self._model)
 
     def _fit(self, model: RegmodModel, data: DataFrame, **optimizer_options) -> None:
 
@@ -246,7 +245,7 @@ class Model:
 
         model.fit(**optimizer_options)
 
-    def predict(self, model: RegmodModel, test_set: DataFrame) -> np.ndarray:
+    def predict(self, model: RegmodModel, test_set: DataFrame, param_name: str) -> np.ndarray:
         """
         Wraps regmod's predict method to avoid modifying input dataset.
 
@@ -255,11 +254,12 @@ class Model:
 
         :param model: a fitted RegmodModel
         :param test_set: a dataset to generate predictions from
+        :param param_name: a string representing the parameter we are predicting out on
         :return: an array of predictions for the model parameter of interest
         """
         split_coefficients = model.split_coefs(model.opt_coefs)
         # Select the index of the parameter of interest
-        index = model.param_names.index(self.model_param_name)
+        index = model.param_names.index(param_name)
         coefficients = split_coefficients[index]
         parameter = model.params[index]
 
@@ -284,7 +284,7 @@ class Model:
         if model is None:
             model = self._model
 
-        preds = self.predict(model, test_set)
+        preds = self.predict(model, test_set, self.model_param_name)
         observed = test_set[self.col_obs]
         performance = self.model_eval_metric(
             obs=observed.array,
@@ -294,23 +294,3 @@ class Model:
         model.data.detach_df()
 
         return performance
-
-# y    sdi   ldi   vac
-#
-#
-# Rover(dataset, col_fixed={'mu': ['intercept'], 'sigma': ['intercept', 'vac']},
-#       col_cov=['sdi', 'ldi'], parameter_to_explore='mu')
-#
-# Base Model -> Model
-#
-#
-# Model._model: RegmodModel
-#
-# RegmodModel(
-#
-#     param_specs={
-#         parameter_to_explore: [],
-#         key: value for key, val in col_fixed
-#     }
-# )
-

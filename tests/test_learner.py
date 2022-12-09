@@ -1,4 +1,4 @@
-from modrover.model import Model
+from modrover.learner import Learner
 from modrover.modelid import ModelID
 
 import numpy as np
@@ -39,7 +39,7 @@ def model_specs():
 def test_model_init(dataset, model_specs):
     # Arbitrary: select first 2 covariates out of 5
     model_id = ModelID(cov_ids=(0, 1, 2))
-    model = Model(model_id=model_id, **model_specs)
+    model = Learner(model_id=model_id, **model_specs)
     # Check that model is "new"
     assert not model.has_been_fit
     assert model.opt_coefs is None
@@ -57,8 +57,8 @@ def test_model_init(dataset, model_specs):
 
 def test_model_fit(dataset, model_specs):
 
-    model_id = ModelID(cov_ids=(0, 1, 2))
-    model = Model(model_id=model_id, **model_specs)
+    model_id = ModelID(cov_ids=(0, 1, 2, 3))
+    model = Learner(model_id=model_id, **model_specs)
 
     # Fit the model, don't check for correctness
     model.fit(dataset, holdout_cols=['holdout_1', 'holdout_2'])
@@ -74,7 +74,7 @@ def test_two_param_model_fit(dataset):
 
     model_id = ModelID(cov_ids=(0, 1, 2))
 
-    model = Model(
+    model = Learner(
         model_id=model_id,
         model_type='tobit',
         col_obs='y',
@@ -90,10 +90,25 @@ def test_two_param_model_fit(dataset):
     regmod_model = model._initialize_model()
     assert set(regmod_model.data.col_covs) == {'var_a', 'var_b', 'var_d', 'var_e', 'intercept'}
 
-    # TODO: check the data dimensions. If we want to fit a model on a/b/d/e,
-    # should we see column C in the result?
     model.fit(dataset, holdout_cols=['holdout_1', 'holdout_2'])
     assert 0 <= model.performance <= 1
     assert model.opt_coefs is not None
     assert isinstance(model.opt_coefs, np.ndarray)
     assert isinstance(model.vcov, np.ndarray)
+
+
+def test_initialize_model_with_coefs(model_specs):
+
+    model_id = ModelID(cov_ids=(0, 1, 2))
+    model = Learner(model_id=model_id, **model_specs)
+
+    # Set some known coefficients, random number
+    # 3 covariates implies 3 coefficients
+    expected_coefs = np.array([-.5, -.3, .3])
+    model.opt_coefs = expected_coefs
+    assert np.isclose(model.opt_coefs, expected_coefs).all()
+
+    with pytest.raises(ValueError):
+        # Setting 4 coefficients on 3 variables should raise an error
+        model.opt_coefs = np.append(expected_coefs, .4)
+
