@@ -10,7 +10,7 @@ from pandas import DataFrame
 from typing import Callable, Dict, List, Optional, Tuple
 
 from .globals import get_rmse
-from .modelid import ModelID
+from .learnerid import LearnerID
 from .info import model_type_dict
 
 @dataclass
@@ -33,7 +33,7 @@ class Learner:
 
     def __init__(
         self,
-        model_id: ModelID,
+        model_id: LearnerID,
         model_type: str,
         col_obs: str,
         col_covs: List[str],
@@ -48,7 +48,7 @@ class Learner:
         """
         Initialize a Rover submodel
 
-        :param model_id: ModelID, represents the covariate indices to fit on
+        :param model_id: LearnerID, represents the covariate indices to fit on
         :param model_type: str, represents what type of model, e.g. gaussian, tobit, etc.
         :param col_obs: str, which column is the target column to predict out
         :param col_covs: List[str], all possible columns that rover can explore over
