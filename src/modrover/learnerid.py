@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Tuple
 
 
-class ModelID:
+class LearnerID:
 
     def __init__(self, cov_ids: Tuple[int, ...]) -> None:
         self.cov_ids: Tuple[int, ...]
@@ -34,16 +34,16 @@ class ModelID:
         return tuple(cov_ids)
 
     @classmethod
-    def _create_modelid(cls, cov_ids: Tuple[int, ...]) -> ModelID:
+    def _create_modelid(cls, cov_ids: Tuple[int, ...]) -> LearnerID:
         """
-        Create a ModelID instance given a set of covariate ids
+        Create a LearnerID instance given a set of covariate ids
 
         :param cov_ids: Tuple(int)
-        :return: ModelID set
+        :return: LearnerID set
         """
         return cls(cov_ids)
 
-    def create_children(self, num_covs: int) -> list["ModelID"]:
+    def create_children(self, num_covs: int) -> list["LearnerID"]:
         """
         Create a new set of child covariate ID combinations based on the current one.
 
@@ -52,7 +52,7 @@ class ModelID:
         [(0,1,2,3), (0,1,2,4), (0,1,2,5)]
 
         :param num_covs: total number of covariates represented
-        :return: A list of ModelID classes wrapping the child covariate ID tuples
+        :return: A list of LearnerID classes wrapping the child covariate ID tuples
         """
         children = [
             self._create_modelid(
@@ -63,9 +63,9 @@ class ModelID:
         ]
         return children
 
-    def create_parents(self) -> list["ModelID"]:
+    def create_parents(self) -> list["LearnerID"]:
         """
-        Create a parent ModelID class with one less covariate than the current modelid.
+        Create a parent LearnerID class with one less covariate than the current modelid.
 
         As an example, if our current covariate_id tuple is (0,1,2),
         this function will return [(0,1), (0,2)]

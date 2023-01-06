@@ -12,8 +12,8 @@ from regmod.data import Data
 from regmod.models import Model
 from regmod.variable import Variable
 
-from .model import Model
-from .modelid import ModelID
+from .learner import Learner
+from .learnerid import LearnerID
 from .types import CovIDs, CovIDsSet
 
 
@@ -32,10 +32,10 @@ class ModelHub:
         )
 
     def _get_model(
-            self, model_id: ModelID,
+            self, model_id: LearnerID,
             previous_coefficients: Optional[np.array] = None
-    ) -> Model:
-        model = Model(model_id, self.specs)
+    ) -> Learner:
+        model = Learner(model_id, self.specs)
         if previous_coefficients:
             model.set_model_coefficients(previous_coefficients)
         return model
