@@ -12,11 +12,11 @@ class Rover:
         model_type: str,
         col_obs: str,
         col_weights: str,
-        col_fixed: dict[str, list],
-        col_covs: dict[str, list],
-        col_offset: dict[str, list],
+        col_fixed: dict[str, list[str]],
+        col_covs: dict[str, list[str]],
+        col_offset: dict[str, str],
         model_eval_metric: Callable = get_rmse,
-    ):
+    ) -> None:
         self.model_type = model_type
         self.col_obs = col_obs
         self.col_weights = col_weights

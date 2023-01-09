@@ -1,5 +1,6 @@
+import itertools
 from operator import attrgetter
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Optional
 from warnings import warn
 
 import numpy as np
@@ -17,39 +18,33 @@ class Learner:
 
     def __init__(
         self,
-        model_id: LearnerID,
+        learner_id: LearnerID,
         model_type: str,
         col_obs: str,
-        col_covs: List[str],
-        col_fixed: Dict[str, List],
-        # TODO: make col_offset a dictionary for 2 parameter model
-        col_offset: str = "offset",
+        col_covs: dict[str, list[str]],
+        col_offset: dict[str, str] = "offset",
         col_weights: str = "weights",
-        model_param_name: str = '',
-        # RMSE a better default metric
         model_eval_metric: Callable = get_rmse,
     ) -> None:
         """
         Initialize a Rover submodel
 
-        :param model_id: LearnerID, represents the covariate indices to fit on
+        :param learner_id: LearnerID, represents the covariate indices to fit on
         :param model_type: str, represents what type of model, e.g. gaussian, tobit, etc.
         :param col_obs: str, which column is the target column to predict out
-        :param col_covs: List[str], all possible columns that rover can explore over
-        :param col_fixed: Dict[str, List], which columns are invariant keyed by model parameter
+        :param col_covs: list[str], all possible columns that rover can explore over
         :param col_offset:
         :param col_weights:
         :param model_param_name:
         :param model_eval_metric:
         :param optimizer_options:
         """
-        self.model_id = model_id
+        self.learner_id = learner_id
         self.model_type = model_type
 
         # TODO: Should these be parameters to fit, or instance attributes?
         self.col_obs = col_obs
         self.col_covs = col_covs
-        self.col_fixed = col_fixed
         self.col_offset = col_offset
         self.col_weights = col_weights
         self.model_eval_metric = model_eval_metric
@@ -64,8 +59,8 @@ class Learner:
         self.performance: Optional[float] = None
 
     @property
-    def cov_ids(self) -> Tuple[int]:
-        return self.model_id.cov_ids
+    def cov_ids(self) -> tuple[int]:
+        return self.learner_id.cov_ids
 
     @property
     def opt_coefs(self) -> Optional[np.ndarray]:
@@ -122,25 +117,14 @@ class Learner:
         Initialize a regmod model based on the provided modelspecs.
         """
 
-        # Validate that all parameters are represented
-        if not set(self.col_fixed.keys()) == set(self.model_class.param_names):
-            raise ValueError(
-                f"Mismatch between specified parameter names {set(self.col_fixed.keys())} "
-                f"and expected parameter names {set(self.model_class.param_names)}")
-
-        # TODO: Column selection logic should live in the rover class, move out of here
-        # Select the parameter-specific covariate columns
-        all_covariates = {self.col_covs[i - 1] for i in self.cov_ids if i > 0}
-
-        # Add on the fixed columns for every parameter
-        for parameter, columns in self.col_fixed.items():
-            for col in columns:
-                all_covariates.add(col)
-
+        # this shouldn't be necessary in regmod v1.0.0
+        all_covariates = list(
+            set(itertools.chain.from_iterable(self.col_covs.values())) |
+            set(itertools.chain.from_iterable(self.col_offset.values()))
+        )
         data = Data(
             col_obs=self.col_obs,
-            col_covs=list(all_covariates),
-            col_offset=self.col_offset,
+            col_covs=all_covariates,
             col_weights=self.col_weights,
         )
 
@@ -149,17 +133,13 @@ class Learner:
         # TODO: Does intercept get counted across multiple parameters?
         regmod_variables = {
             param_name: {
-                'variables': [Variable(cov) for cov in covariates]
+                "variables": [
+                    Variable(cov) for cov in self.col_covs[param_name]
+                ],
+                "offset": self.col_offset[param_name],
             }
-            for param_name, covariates in self.col_fixed.items()
+            for param_name in self.col_covs.keys()
         }
-
-        # Add the remaining columns specific to this model
-        for cov_id in self.cov_ids:
-            if cov_id > 0:
-                regmod_variables[self.model_param_name]['variables'].append(
-                    Variable(self.col_covs[cov_id - 1])
-                )
 
         model = self.model_class(
             data=data,
@@ -171,7 +151,7 @@ class Learner:
     def fit(
         self,
         data: DataFrame,
-        holdout_cols: Optional[List[str]] = None,
+        holdout_cols: Optional[list[str]] = None,
         **optimizer_options
     ):
         """
