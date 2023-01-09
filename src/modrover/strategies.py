@@ -1,156 +1,107 @@
 from abc import ABC, abstractmethod
+from itertools import combinations
+from typing import Dict, Generator, Iterable, Set
 
-from .modelhub import ModelHub
+from .learnerid import LearnerID
+from .learner import Learner
 from .types import CovIDs, CovIDsSet
 
 
 class RoverStrategy(ABC):
+    """
+    An abstract base class representing a valid Rover strategy.
 
-    def __init__(self, modelhub: ModelHub):
-        self.modelhub = modelhub
-        self.performances = {
-            cov_ids: self.modelhub.get_model_performance(cov_ids)
-            for cov_ids in self.modelhub.get_ran_cov_ids_set()
-        }
+    The strategy is responsible for selecting the next set of LearnerIDs, determining the next
+    layer of individual learners that Rover will fit. Fitting learners and storing results
+    is managed by Rover itself.
+
+    """
 
     @abstractmethod
-    def implement(self, **kwargs):
-        pass
+    def generate_layer(self, *args, **kwargs) -> Iterable:
+        raise NotImplementedError
 
-    def run_model(self, cov_ids: CovIDs):
-        self.modelhub.run_model(cov_ids)
-        if cov_ids not in self.performances and self.modelhub._has_ran(cov_ids):
-            performance = self.modelhub.get_model_performance(cov_ids)
-            self.performances[cov_ids] = performance
+    def _filter_cov_ids_set(self,
+                            cov_ids_set: CovIDsSet,
+                            performances: Dict,
+                            some_callable=None,
+                            threshold: float = 1.0,
+                            level_lb: int = 1,
+                            level_ub: int = 1) -> CovIDsSet:
+        """Filter out low-performing covariate ids from selection.
 
+        Algorithm:
+        Select the n best performing covariate ids out of the input set
+        Generate parents/children
+        If new model has been fit,
+        """
+        sorted_cov_ids = sorted(cov_ids_set, lambda x: performances[x])
+        # Select the n best
+        best_cov_ids = sorted_cov_ids[-level_ub:]
+
+        return best_cov_ids
 
 class FullExplore(RoverStrategy):
 
-    def implement(self, **kwargs):
-        cov_ids_set = self.modelhub.get_full_cov_ids_set()
-        for cov_ids in cov_ids_set:
-            self.modelhub.run_model(cov_ids)
+    def __init__(self):
+        self.base_learnerid = set()
+
+    def generate_layer(self, all_learner_ids: Set[LearnerID], *args, **kwargs) -> Generator:
+        """Find every single possible learner ID combination, return in a single layer."""
+        for num_elements in range(1, len(all_learner_ids) + 1):
+            yield from combinations(all_learner_ids, num_elements)
 
 
 class DownExplore(RoverStrategy):
 
-    def _filter_cov_ids_set(self,
-                            cov_ids_set: CovIDsSet,
-                            threshold: float = 1.0,
-                            level_lb: int = 1,
-                            level_ub: int = 1) -> CovIDsSet:
-        # remove the the covariate id that doesn't have performance metric
-        ran_cov_ids_set = set(self.performances.keys())
-        cov_ids_set = (
-            cov_ids_set - (cov_ids_set - ran_cov_ids_set)
-        )
-        if len(cov_ids_set) <= level_lb:
-            return cov_ids_set
-        # rank covariate ids by their performance
-        cov_ids_list = list(cov_ids_set)
-        cov_ids_list.sort(key=lambda x: self.performances[x])
-        cov_ids_list = cov_ids_list[-level_ub:]
-        cov_ids_set = set(cov_ids_list)
-        for cov_ids in cov_ids_list:
-            if len(cov_ids_set) <= level_lb:
-                break
-            compare_cov_ids_set = self.modelhub.get_parent_cov_ids_set(
-                cov_ids, ran_cov_ids_set
-            )
-            if any(
-                self.performances[cov_ids] / self.performances[compare_cov_ids] < threshold
-                for compare_cov_ids in compare_cov_ids_set
-            ):
-                cov_ids_set.remove(cov_ids)
-        return cov_ids_set
+    def generate_layer(self,
+                       current_learner_ids: Set[LearnerID],
+                       all_learner_ids: Set[LearnerID],
+                       performances: Dict[LearnerID, Learner]):
+        """
+        The down strategy will select a set of learner IDs numbering one more than the current.
 
-    def implement(self, **kwargs):
-        # fit root model
-        self.modelhub.run_model(tuple())
-        # fit first layer
-        next_cov_ids_set = self.modelhub.get_child_cov_ids_set(tuple())
-        for cov_ids in next_cov_ids_set:
-            self.run_model(cov_ids)
+        E.g. if the full set of ids is 1-5, and our current is (0,1)
 
-        # filter the next layer
-        curr_cov_ids_set = self._filter_cov_ids_set(
-            next_cov_ids_set, **kwargs
-        )
-        next_cov_ids_set = set().union(*[
-            self.modelhub.get_child_cov_ids_set(cov_ids)
-            for cov_ids in curr_cov_ids_set
-        ])
-        while len(next_cov_ids_set) > 0:
-            for cov_ids in next_cov_ids_set:
-                self.run_model(cov_ids)
-            curr_cov_ids_set = self._filter_cov_ids_set(
-                next_cov_ids_set, **kwargs
-            )
-            next_cov_ids_set = set().union(*[
-                self.modelhub.get_child_cov_ids_set(cov_ids)
-                for cov_ids in curr_cov_ids_set
-            ])
+        The children will be (0,1,2), (0,1,3), (0,1,4), (0,1,5)
+
+        :param current_learner_ids:
+        :param all_learner_ids:
+        :param performances:
+        :return:
+        """
+        next_learner_ids = set()
+        remaining_cov_ids = self._filter_cov_ids_set(current_learner_ids)
+        for learner_id in remaining_cov_ids:
+            candidate_ids = learner_id.create_children(len(all_learner_ids))
+            next_learner_ids |= candidate_ids
+        return next_learner_ids
 
 
 class UpExplore(RoverStrategy):
 
-    def _filter_cov_ids_set(self,
-                            cov_ids_set: CovIDsSet,
-                            threshold: float = 1.0,
-                            level_lb: int = 1,
-                            level_ub: int = 1) -> CovIDsSet:
-        # remove the the covariate id that doesn't have performance metric
-        ran_cov_ids_set = set(self.performances.keys())
-        cov_ids_set = (
-            cov_ids_set - (cov_ids_set - ran_cov_ids_set)
-        )
-        if len(cov_ids_set) <= level_lb:
-            return cov_ids_set
-        # rank covariate ids by their performance
-        cov_ids_list = list(cov_ids_set)
-        cov_ids_list.sort(key=lambda x: self.performances[x])
-        cov_ids_list = cov_ids_list[-level_ub:]
-        cov_ids_set = set(cov_ids_list)
-        for cov_ids in cov_ids_list:
-            if len(cov_ids_set) <= level_lb:
-                break
-            compare_cov_ids_set = self.modelhub.get_child_cov_ids_set(
-                cov_ids, ran_cov_ids_set
-            )
-            if any(
-                self.performances[cov_ids] / self.performances[compare_cov_ids] < threshold
-                for compare_cov_ids in compare_cov_ids_set
-            ):
-                cov_ids_set.remove(cov_ids)
-        return cov_ids_set
+    def generate_layer(self,
+                       current_learner_ids: Set[LearnerID],
+                       all_learner_ids: Set[LearnerID],
+                       performances: Dict[LearnerID, Learner]):
+        """
+        The down strategy will select a set of learner IDs numbering one more than the current.
 
-    def implement(self, **kwargs):
-        # fit full model
-        full_cov_ids = self.modelhub.get_full_cov_ids()
-        self.modelhub.run_model(full_cov_ids)
-        # fit first layer
-        next_cov_ids_set = self.modelhub.get_parent_cov_ids_set(full_cov_ids)
-        for cov_ids in next_cov_ids_set:
-            self.run_model(cov_ids)
+        E.g. if the full set of ids is 1-5, and our current is (0,1)
 
-        # filter the next layer
-        curr_cov_ids_set = self._filter_cov_ids_set(
-            next_cov_ids_set, **kwargs
-        )
-        next_cov_ids_set = set().union(*[
-            self.modelhub.get_parent_cov_ids_set(cov_ids)
-            for cov_ids in curr_cov_ids_set
-        ])
-        while len(next_cov_ids_set) > 0:
-            for cov_ids in next_cov_ids_set:
-                self.run_model(cov_ids)
-            curr_cov_ids_set = self._filter_cov_ids_set(
-                next_cov_ids_set, **kwargs
-            )
-            next_cov_ids_set = set().union(*[
-                self.modelhub.get_parent_cov_ids_set(cov_ids)
-                for cov_ids in curr_cov_ids_set
-            ])
+        The children will be (0,1,2), (0,1,3), (0,1,4), (0,1,5)
+
+        :param current_learner_ids:
+        :param all_learner_ids:
+        :param performances:
+        :return:
+        """
+        next_learner_ids = set()
+        remaining_cov_ids = self._filter_cov_ids_set(current_learner_ids)
+        for learner_id in remaining_cov_ids:
+            candidate_ids = learner_id.create_parents()
+            next_learner_ids |= candidate_ids
+        return next_learner_ids
 
 
 strategy_type_dict = {
