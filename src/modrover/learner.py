@@ -1,32 +1,16 @@
-from dataclasses import dataclass
 from operator import attrgetter
+from typing import Callable, Dict, List, Optional, Tuple
 from warnings import warn
 
 import numpy as np
+from pandas import DataFrame
 from regmod.data import Data
 from regmod.models import Model as RegmodModel
 from regmod.variable import Variable
-from pandas import DataFrame
-from typing import Callable, Dict, List, Optional, Tuple
 
 from .globals import get_rmse
-from .learnerid import LearnerID
 from .info import model_type_dict
-
-@dataclass
-class Rover:
-
-    # Placeholder, to be fleshed out later and probably moved.
-    model_type: str
-    col_fixed: Dict[str, List]
-    # col_fixed keyed by parameter, ex.
-    # {
-    #     'mu': ['intercept'],
-    #     'sigma': []
-    # }
-    col_covs: List[str]  # All possible covariates we can explore over
-    col_obs: str
-    model_eval_metric: str
+from .learnerid import LearnerID
 
 
 class Learner:
