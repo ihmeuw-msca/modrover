@@ -29,4 +29,20 @@ class Rover:
         # ...
 
     def get_learner(self, learner_id: LearnerID) -> Learner:
-        ...
+        all_covariates = list(self.col_covs.values())[0]
+        col_covs = {}
+        for param_name, covs in self.col_fixed.items():
+            col_covs[param_name] = covs.copy()
+            if param_name in self.col_covs:
+                col_covs[param_name].extend([
+                    all_covariates[i - 1] for i in learner_id
+                ])
+        return Learner(
+            learner_id,
+            self.model_type,
+            self.col_obs,
+            self.col_covs,
+            self.col_offset,
+            self.col_weights,
+            self.model_eval_metric,
+        )
