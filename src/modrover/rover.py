@@ -35,7 +35,7 @@ class Rover:
             col_covs[param_name] = covs.copy()
             if param_name in self.col_covs:
                 col_covs[param_name].extend([
-                    all_covariates[i - 1] for i in learner_id
+                    all_covariates[i - 1] for i in learner_id.cov_ids
                 ])
         return Learner(
             learner_id,
