@@ -2,13 +2,14 @@ from typing import Optional
 
 import numpy as np
 from numpy.typing import ArrayLike
-from regmod.models import BinomialModel, GaussianModel, PoissonModel, TobitModel
+from regmod.models import (BinomialModel, GaussianModel, PoissonModel,
+                           TobitModel)
 
 model_type_dict = {
     "gaussian": GaussianModel,
     "poisson": PoissonModel,
     "binomial": BinomialModel,
-    "tobit": TobitModel
+    "tobit": TobitModel,
 }
 
 

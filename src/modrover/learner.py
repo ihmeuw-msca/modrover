@@ -22,7 +22,7 @@ class Learner:
         model_type: str,
         col_obs: str,
         col_covs: dict[str, list[str]],
-        col_offset: dict[str, str] = "offset",
+        col_offset: dict[str, str],
         col_weights: str = "weights",
         model_eval_metric: Callable = get_rmse,
     ) -> None:
@@ -48,11 +48,6 @@ class Learner:
         self.col_offset = col_offset
         self.col_weights = col_weights
         self.model_eval_metric = model_eval_metric
-
-        # Default to first model parameter name if not specified
-        if not model_param_name:
-            model_param_name = self.model_class.param_names[0]
-        self.model_param_name = model_param_name
 
         # Initialize null model
         self._model: Optional[RegmodModel] = None
@@ -117,14 +112,14 @@ class Learner:
         Initialize a regmod model based on the provided modelspecs.
         """
 
-        # this shouldn't be necessary in regmod v1.0.0
+        # TODO: this shouldn't be necessary in regmod v1.0.0
         all_covariates = list(
-            set(itertools.chain.from_iterable(self.col_covs.values())) |
-            set(itertools.chain.from_iterable(self.col_offset.values()))
+            set(itertools.chain.from_iterable(self.col_covs.values()))
         )
         data = Data(
             col_obs=self.col_obs,
             col_covs=all_covariates,
+            col_offset=list(self.col_offset.values())[0],
             col_weights=self.col_weights,
         )
 
@@ -136,7 +131,8 @@ class Learner:
                 "variables": [
                     Variable(cov) for cov in self.col_covs[param_name]
                 ],
-                "offset": self.col_offset[param_name],
+                # TODO: in regmod v1.0.0, offset will be parameter specific
+                # "offset": self.col_offset[param_name],
             }
             for param_name in self.col_covs.keys()
         }
@@ -209,7 +205,7 @@ class Learner:
 
         model.fit(**optimizer_options)
 
-    def predict(self, model: RegmodModel, test_set: DataFrame, param_name: str) -> np.ndarray:
+    def predict(self, model: RegmodModel, test_set: DataFrame) -> np.ndarray:
         """
         Wraps regmod's predict method to avoid modifying input dataset.
 
@@ -221,17 +217,11 @@ class Learner:
         :param param_name: a string representing the parameter we are predicting out on
         :return: an array of predictions for the model parameter of interest
         """
-        split_coefficients = model.split_coefs(model.opt_coefs)
-        # Select the index of the parameter of interest
-        index = model.param_names.index(param_name)
-        coefficients = split_coefficients[index]
-        parameter = model.params[index]
-
-        data = model.data
-        data.attach_df(test_set)
-
-        preds = parameter.get_param(coefficients, data)
-        return preds
+        df_pred = model.predict(test_set)
+        col_pred = list(self.col_covs.keys())[0]
+        # TODO: in regmod v1.0.0, we should have a col called "pred_obs"
+        # col_pred = "pred_obs"
+        return df_pred[col_pred].to_numpy()
 
     def score(self, test_set: DataFrame, model: Optional[RegmodModel] = None) -> float:
         """
@@ -248,7 +238,7 @@ class Learner:
         if model is None:
             model = self._model
 
-        preds = self.predict(model, test_set, self.model_param_name)
+        preds = self.predict(model, test_set)
         observed = test_set[self.col_obs]
         performance = self.model_eval_metric(
             obs=observed.array,
