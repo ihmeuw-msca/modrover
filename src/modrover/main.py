@@ -1,3 +1,5 @@
+# TODO: Deprecated, delete when done
+
 from operator import attrgetter
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -7,26 +9,34 @@ from pplkit.data.interface import DataInterface
 
 from .info import RoverSpecs
 from .modelhub import ModelHub
+from .learner import Learner
 from .strategies import strategy_type_dict
 
 
 class Rover:
 
-    def __init__(self, specs: RoverSpecs, modelhub: ModelHub):
-        self.specs = specs
-        self.modelhub = modelhub
-        self.strategies = [
-            strategy_type_dict[name](self.modelhub)
-            for name in self.specs.strategy_names
-        ]
+    def __init__(self, num_covariates: int):
+        self.performances = {}
+        self.num_covariates = num_covariates
 
-    def explore(self):
-        for i, strategy in enumerate(self.strategies):
-            strategy.implement(
-                **self.specs.strategy_options.get(
-                    self.specs.strategy_names[i], {}
-                )
-            )
+    def explore(self, strategy: str):
+        strategy_class = strategy_type_dict[strategy]
+        concrete_strategy = strategy_class()
+        base = concrete_strategy.base_learnerid
+        previous_layer_ids = set()
+        current_ids = {base}
+
+        while current_ids:
+            for learner_id in current_ids:
+                if learner_id not in self.performances:
+                    learner = Learner(learner_id)
+                    learner.fit()
+                    self.performances[learner_id] = learner
+            next_ids = concrete_strategy.generate_next_layer(
+                current_ids, self.performances, previous_layer_ids)
+            previous_layer_ids = current_ids
+            current_ids = next_ids
+        return
 
     def collect(self) -> pd.DataFrame:
         sub_dirs = map(

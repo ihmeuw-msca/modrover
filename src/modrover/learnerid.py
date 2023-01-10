@@ -88,3 +88,6 @@ class LearnerID:
 
     def __eq__(self, other) -> bool:
         return hash(self) == hash(other)
+
+    def __len__(self) -> int:
+        return len(self.cov_ids)
