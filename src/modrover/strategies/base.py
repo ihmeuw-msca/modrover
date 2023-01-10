@@ -40,11 +40,12 @@ class RoverStrategy(ABC):
         """
         raise NotImplementedError
 
-    def _filter_cov_ids_set(self,
-                            current_learner_ids: set[LearnerID],
-                            performances: dict[LearnerID, Learner],
-                            threshold: float = 1.0,
-                            num_best: int = 1) -> set[LearnerID]:
+    def _filter_learner_ids(
+            self,
+            current_learner_ids: set[LearnerID],
+            performances: dict[LearnerID, Learner],
+            threshold: float = 1.0,
+            num_best: int = 1) -> set[LearnerID]:
         """Filter out low-performing covariate ids from selection.
 
         Algorithm:

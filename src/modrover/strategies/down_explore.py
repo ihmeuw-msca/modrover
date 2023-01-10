@@ -28,7 +28,10 @@ class DownExplore(RoverStrategy):
         :return:
         """
         next_learner_ids = set()
-        remaining_cov_ids = self._filter_cov_ids_set(current_learner_ids)
+        remaining_cov_ids = self._filter_learner_ids(
+            current_learner_ids=current_learner_ids,
+            performances=performances,
+        )
         for learner_id in remaining_cov_ids:
             candidate_ids = learner_id.create_children(self.num_covariates)
             next_learner_ids |= candidate_ids
