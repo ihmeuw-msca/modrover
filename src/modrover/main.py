@@ -7,8 +7,6 @@ from typing import Dict, List, Optional
 import pandas as pd
 from pplkit.data.interface import DataInterface
 
-from .info import RoverSpecs
-from .modelhub import ModelHub
 from .learner import Learner
 from .strategies import strategy_type_dict
 
