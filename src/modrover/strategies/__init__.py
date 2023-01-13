@@ -1,9 +1,10 @@
-from modrover.strategies.down_explore import DownExplore
+from modrover.strategies.backward_explore import BackwardExplore
+from modrover.strategies.forward_explore import ForwardExplore
 from modrover.strategies.full_explore import FullExplore
-from modrover.strategies.up_explore import UpExplore
+
 
 strategy_type_dict = {
     "full": FullExplore,
-    "down": DownExplore,
-    "up": UpExplore,
+    "forward": ForwardExplore,
+    "backward": BackwardExplore,
 }

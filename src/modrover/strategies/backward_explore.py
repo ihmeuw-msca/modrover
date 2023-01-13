@@ -3,7 +3,7 @@ from modrover.learnerid import LearnerID
 from modrover.strategies.base import RoverStrategy
 
 
-class UpExplore(RoverStrategy):
+class BackwardExplore(RoverStrategy):
 
     def __init__(self, num_covariates: int):
         super().__init__(num_covariates)
@@ -12,23 +12,23 @@ class UpExplore(RoverStrategy):
     def generate_next_layer(
             self,
             current_learner_ids: set[LearnerID],
-            performances: dict[LearnerID, Learner]) -> set[LearnerID]:
+            prior_learners: dict[LearnerID, Learner]) -> set[LearnerID]:
         """
-        The down strategy will select a set of learner IDs numbering one more than the current.
+        The backward strategy will select a set of learner IDs numbering one less.
 
-        E.g. if the full set of ids is 1-5, and our current is (0,1)
+        E.g. if the full set of ids is 1-5, and our current is (0,1, 2)
 
-        The children will be (0,1,2), (0,1,3), (0,1,4), (0,1,5)
+        The downstreams will be (0,1), (0,2)
 
         :param current_learner_ids:
         :param all_learner_ids:
-        :param performances:
+        :param prior_learners:
         :return:
         """
         next_learner_ids = set()
-        remaining_cov_ids = self._filter_cov_ids_set(
+        remaining_cov_ids = self._filter_learner_ids(
             current_learner_ids=current_learner_ids,
-            performances=performances,
+            prior_learners=prior_learners,
         )
         for learner_id in remaining_cov_ids:
             candidate_ids = learner_id.create_parents()

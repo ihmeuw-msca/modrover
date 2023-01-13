@@ -43,7 +43,7 @@ class RoverStrategy(ABC):
     def _filter_learner_ids(
             self,
             current_learner_ids: set[LearnerID],
-            performances: dict[LearnerID, Learner],
+            prior_learners: dict[LearnerID, Learner],
             threshold: float = 1.0,
             num_best: int = 1) -> set[LearnerID]:
         """Filter out low-performing covariate ids from selection.
@@ -54,7 +54,7 @@ class RoverStrategy(ABC):
         Return the remainder
         """
         sorted_learner_ids = sorted(current_learner_ids,
-                                    key=lambda x: performances[x].performance)
+                                    key=lambda x: prior_learners[x].performance)
         # Select the n best
         best_learner_ids = set(sorted_learner_ids[-num_best:])
 
@@ -63,15 +63,13 @@ class RoverStrategy(ABC):
             # If any upstream has a performance exceeding the current, don't explore the
             # downstream ids.
             upstreams = self.get_upstream_learner_ids(learner_id)
-            current_performance = performances[learner_id].performance
+            current_performance = prior_learners[learner_id].performance
             for upstream_learner_id in upstreams:
-                try:
-                    previous_performance = performances[upstream_learner_id].performance
-                except KeyError:
-                    continue
-                if current_performance / previous_performance < threshold:
-                    # Remove the current id from consideration
-                    best_learner_ids.remove(learner_id)
-                    break
+                if upstream_learner_id in prior_learners:
+                    previous_performance = prior_learners[upstream_learner_id].performance
+                    if current_performance / previous_performance < threshold:
+                        # Remove the current id from consideration
+                        best_learner_ids.remove(learner_id)
+                        break
 
         return best_learner_ids

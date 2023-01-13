@@ -5,7 +5,7 @@ from modrover.learnerid import LearnerID
 from modrover.strategies.base import RoverStrategy
 
 
-class DownExplore(RoverStrategy):
+class ForwardExplore(RoverStrategy):
 
     def __init__(self, num_covariates: int):
         super().__init__(num_covariates)
@@ -14,7 +14,7 @@ class DownExplore(RoverStrategy):
     def generate_next_layer(
             self,
             current_learner_ids: Set[LearnerID],
-            performances: Dict[LearnerID, Learner]) -> set[LearnerID]:
+            prior_learners: Dict[LearnerID, Learner]) -> set[LearnerID]:
         """
         The down strategy will select a set of learner IDs numbering one more than the current.
 
@@ -24,13 +24,13 @@ class DownExplore(RoverStrategy):
 
         :param current_learner_ids: the current layer of learner IDs
         :param all_learner_ids:
-        :param performances:
+        :param prior_learners:
         :return:
         """
         next_learner_ids = set()
         remaining_cov_ids = self._filter_learner_ids(
             current_learner_ids=current_learner_ids,
-            performances=performances,
+            prior_learners=prior_learners,
         )
         for learner_id in remaining_cov_ids:
             candidate_ids = learner_id.create_children(self.num_covariates)

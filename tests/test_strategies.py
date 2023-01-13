@@ -1,6 +1,6 @@
 from modrover.learner import Learner
 from modrover.learnerid import LearnerID
-from modrover.strategies import DownExplore, FullExplore, UpExplore
+from modrover.strategies import ForwardExplore, FullExplore, BackwardExplore
 from modrover.strategies.base import RoverStrategy
 
 
@@ -30,7 +30,7 @@ def test_basic_filtering():
     base_strategy = DummyStrategy(num_covariates=num_covs)
     first_layer = [LearnerID((0, i,)) for i in range(1, num_covs + 1)]
 
-    # Test 1: select the n best performances
+    # Test 1: select the n best prior_learners
     base_perf = 0
     delta = .2
     performances = {}
@@ -40,13 +40,13 @@ def test_basic_filtering():
 
     best = base_strategy._filter_learner_ids(
         current_learner_ids=set(first_layer),
-        performances=performances,
+        prior_learners=performances,
     )
     assert best == {first_layer[-1]}
 
     best_two = base_strategy._filter_learner_ids(
         current_learner_ids=set(first_layer),
-        performances=performances,
+        prior_learners=performances,
         num_best=2
     )
     assert best_two == set(first_layer[-2:])
