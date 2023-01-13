@@ -43,7 +43,7 @@ class LearnerID:
         """
         return cls(cov_ids)
 
-    def create_children(self, num_covs: int) -> list["LearnerID"]:
+    def create_children(self, num_covs: int) -> list[LearnerID]:
         """
         Create a new set of child covariate ID combinations based on the current one.
 
@@ -63,7 +63,7 @@ class LearnerID:
         ]
         return children
 
-    def create_parents(self) -> list["LearnerID"]:
+    def create_parents(self) -> list[LearnerID]:
         """
         Create a parent LearnerID class with one less covariate than the current modelid.
 
@@ -91,3 +91,4 @@ class LearnerID:
 
     def __len__(self) -> int:
         return len(self.cov_ids)
+
