@@ -28,9 +28,11 @@ def dataset():
 def model_specs():
     specs = dict(
         model_type='gaussian',
-        col_obs='y',
-        col_covs={'mu': ['intercept', 'var_a', 'var_b', 'var_c']},
-        col_offset={'mu': 'offset'},
+        y='y',
+        param_specs={
+            'mu': {"variables": ['intercept', 'var_a', 'var_b', 'var_c']}
+        },
+        offset='offset',
     )
     return specs
 
@@ -72,12 +74,15 @@ def test_two_param_model_fit(dataset):
     model = Learner(
         learner_id=learner_id,
         model_type='tobit',
-        col_obs='y',
-        col_covs={
-            'mu': ['intercept', 'var_a', 'var_b', 'var_c'],
-            'sigma': ['intercept', 'var_d', 'var_e']
+        y='y',
+        param_specs={
+            'mu': {
+                "variables": ['intercept', 'var_a', 'var_b', 'var_c'],
+            },
+            'sigma': {
+                "variables": ['intercept', 'var_d', 'var_e'],
+            }
         },
-        col_offset={"mu": "offset", "sigma": "offset"},
     )
 
     # Should have 2 mu columns, 2 sigma columns, and the intercept

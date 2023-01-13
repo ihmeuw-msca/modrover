@@ -20,10 +20,10 @@ class Learner:
         self,
         learner_id: LearnerID,
         model_type: str,
-        col_obs: str,
-        col_covs: dict[str, list[str]],
-        col_offset: dict[str, str],
-        col_weights: str = "weights",
+        y: str,
+        param_specs: dict[str, dict],
+        offset: str = "offset",
+        weights: str = "weights",
         model_eval_metric: Callable = get_rmse,
     ) -> None:
         """
@@ -43,15 +43,29 @@ class Learner:
         self.model_type = model_type
 
         # TODO: Should these be parameters to fit, or instance attributes?
-        self.col_obs = col_obs
-        self.col_covs = col_covs
-        self.col_offset = col_offset
-        self.col_weights = col_weights
+        self.y = y
+        # TODO: offset will be gone in the regmod v1.0.0
+        self.offset = offset
+        self.weights = weights
         self.model_eval_metric = model_eval_metric
 
         # Initialize null model
         self._model: Optional[RegmodModel] = None
         self.performance: Optional[float] = None
+
+        # extract all covariates
+        all_covariates = set()
+        for param_spec in param_specs.values():
+            all_covariates |= set(param_spec["variables"])
+        self.all_covariates = list(all_covariates)
+
+        # convert str to Variable
+        # TODO: this won't be necessary in regmod v1.0.0
+        for param_spec in param_specs.values():
+            param_spec["variables"] = list(map(
+                Variable, param_spec["variables"]
+            ))
+        self.param_specs = param_specs
 
     @property
     def cov_ids(self) -> tuple[int]:
@@ -61,8 +75,7 @@ class Learner:
     def opt_coefs(self) -> Optional[np.ndarray]:
         if self._model:
             return self._model.opt_coefs
-        else:
-            return None
+        return None
 
     @opt_coefs.setter
     def opt_coefs(self, opt_coefs: np.ndarray):
@@ -72,19 +85,16 @@ class Learner:
 
     @property
     def model_class(self):
-        try:
-            return model_type_dict[self.model_type]
-        except KeyError as e:
+        if self.model_type not in model_type_dict:
             raise KeyError(f"Model type {self.model_type} not known, "
-                           f"please select from {list(model_type_dict.keys())}"
-                           ) from e
+                           f"please select from {list(model_type_dict.keys())}")
+        return model_type_dict[self.model_type]
 
     @property
     def vcov(self) -> Optional[np.ndarray]:
         if self._model:
             return self._model.opt_vcov
-        else:
-            return None
+        return None
 
     @property
     def has_been_fit(self) -> bool:
@@ -113,33 +123,19 @@ class Learner:
         """
 
         # TODO: this shouldn't be necessary in regmod v1.0.0
-        all_covariates = list(
-            set(itertools.chain.from_iterable(self.col_covs.values()))
-        )
         data = Data(
-            col_obs=self.col_obs,
-            col_covs=all_covariates,
-            col_offset=list(self.col_offset.values())[0],
-            col_weights=self.col_weights,
+            col_obs=self.y,
+            col_covs=self.all_covariates,
+            col_offset=self.offset,
+            col_weights=self.weights,
         )
 
         # Create regmod variables separately, by parameter
         # Initialize with fixed parameters
         # TODO: Does intercept get counted across multiple parameters?
-        regmod_variables = {
-            param_name: {
-                "variables": [
-                    Variable(cov) for cov in self.col_covs[param_name]
-                ],
-                # TODO: in regmod v1.0.0, offset will be parameter specific
-                # "offset": self.col_offset[param_name],
-            }
-            for param_name in self.col_covs.keys()
-        }
-
         model = self.model_class(
             data=data,
-            param_specs=regmod_variables
+            param_specs=self.param_specs,
         )
         self._model = model
         return model
@@ -239,7 +235,7 @@ class Learner:
             model = self._model
 
         preds = self.predict(model, test_set)
-        observed = test_set[self.col_obs]
+        observed = test_set[self.y]
         performance = self.model_eval_metric(
             obs=observed.array,
             pred=preds,
