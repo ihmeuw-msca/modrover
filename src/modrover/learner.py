@@ -218,7 +218,7 @@ class Learner:
         :return: an array of predictions for the model parameter of interest
         """
         df_pred = model.predict(test_set)
-        col_pred = list(self.col_covs.keys())[0]
+        col_pred = model.param_names[0]
         # TODO: in regmod v1.0.0, we should have a col called "pred_obs"
         # col_pred = "pred_obs"
         return df_pred[col_pred].to_numpy()
