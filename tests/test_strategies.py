@@ -54,4 +54,30 @@ def test_basic_filtering():
 
 def test_parent_ratio():
     """Test that we can drop learner ids with better performing upstreams."""
-    pass
+    strategy = BackwardExplore(4)
+
+    # Initialize a set of model ids and their children
+    lid_1 = LearnerID((0, 1))
+    lid_2 = LearnerID((0, 2))
+
+    # Mock up some performances
+    performances = {
+        lid_1: DummyModel(5),
+        lid_2: DummyModel(10)
+    }
+
+    upstreams = strategy.get_upstream_learner_ids(lid_1).\
+        union(strategy.get_upstream_learner_ids(lid_2))
+    for lid in upstreams:
+        performances[lid] = DummyModel(7)
+
+    # LID 1 should have worse performance than its upstreams, so should not be explored further
+    # LID 2 has better performance than all parents, so we should be exploring further
+
+    new_lids = strategy._filter_learner_ids(
+        current_learner_ids={lid_1, lid_2},
+        prior_learners=performances,
+        num_best=2,
+        threshold=1
+    )
+    assert new_lids == {lid_2}

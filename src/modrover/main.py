@@ -8,7 +8,7 @@ import pandas as pd
 from pplkit.data.interface import DataInterface
 
 from .learner import Learner
-from .strategies import strategy_type_dict
+from .strategies import get_strategy
 
 
 class Rover:

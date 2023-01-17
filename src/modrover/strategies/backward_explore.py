@@ -32,11 +32,11 @@ class BackwardExplore(RoverStrategy):
         )
         for learner_id in remaining_cov_ids:
             candidate_ids = learner_id.create_parents()
-            next_learner_ids |= candidate_ids
+            next_learner_ids |= set(candidate_ids)
         return next_learner_ids
 
-    def get_upstream_learner_ids(self, learner_id: LearnerID):
+    def get_upstream_learner_ids(self, learner_id: LearnerID) -> set[LearnerID]:
         """Return the possible previous nodes.
 
         For UpExplore, this is the current learner id's children."""
-        return learner_id.create_children(self.num_covariates)
+        return set(learner_id.create_children(self.num_covariates))

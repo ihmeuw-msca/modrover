@@ -14,3 +14,13 @@ def test_get_learner():
     learner = rover.get_learner(LearnerID((0, 1, 2)))
 
     assert isinstance(learner, Learner)
+
+
+def test_explore():
+    rover = Rover(
+        model_type="gaussian",
+        y="obs",
+        cov_fixed={"mu": ["intercept"]},
+        cov_explore={"mu": ["cov1", "cov2", "cov3"]},
+    )
+

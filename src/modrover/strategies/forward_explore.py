@@ -34,7 +34,7 @@ class ForwardExplore(RoverStrategy):
         )
         for learner_id in remaining_cov_ids:
             candidate_ids = learner_id.create_children(self.num_covariates)
-            next_learner_ids |= candidate_ids
+            next_learner_ids |= set(candidate_ids)
         return next_learner_ids
 
     def get_upstream_learner_ids(self, learner_id: LearnerID) -> set[LearnerID]:

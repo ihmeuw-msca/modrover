@@ -59,6 +59,7 @@ class RoverStrategy(ABC):
         best_learner_ids = set(sorted_learner_ids[-num_best:])
 
         # Compare to the comparison layer.
+        learner_ids_to_remove = set()
         for learner_id in best_learner_ids:
             # If any upstream has a performance exceeding the current, don't explore the
             # downstream ids.
@@ -69,7 +70,7 @@ class RoverStrategy(ABC):
                     previous_performance = prior_learners[upstream_learner_id].performance
                     if current_performance / previous_performance < threshold:
                         # Remove the current id from consideration
-                        best_learner_ids.remove(learner_id)
+                        learner_ids_to_remove.add(learner_id)
                         break
 
-        return best_learner_ids
+        return best_learner_ids - learner_ids_to_remove
