@@ -7,7 +7,7 @@ from modrover.strategies.base import RoverStrategy
 class DummyModel(Learner):
     """Mock the Model class for testing. Only need a performance attribute."""
 
-    def __init__(self, performance: float):
+    def __init__(self, performance: float = 1.0):
         self.performance = performance
 
 
@@ -81,3 +81,68 @@ def test_parent_ratio():
         threshold=1
     )
     assert new_lids == {lid_2}
+
+
+def test_generate_forward_layer():
+
+    strategy = ForwardExplore(3)
+    lid_1 = LearnerID((0, 1))
+    lid_2 = LearnerID((0, 2))
+
+    performances = {
+        lid_1: DummyModel(),
+        lid_2: DummyModel()
+    }
+
+    next_layer = strategy.generate_next_layer(
+        current_learner_ids={lid_1, lid_2},
+        prior_learners=performances,
+        num_best=2,
+    )
+
+    expected_layer = {
+        LearnerID((0, 1, 2)),
+        LearnerID((0, 2, 3)),
+        LearnerID((0, 1, 3))
+    }
+    assert next_layer == expected_layer
+
+    # Check terminal condition
+    terminal_lid = LearnerID((0, 1, 2, 3))
+    performances[terminal_lid] = DummyModel()
+    final_layer = strategy.generate_next_layer(
+        {terminal_lid},
+        performances
+    )
+    assert not final_layer
+
+
+def test_generate_backward_layer():
+    strategy = BackwardExplore(3)
+    lid_1 = LearnerID((0, 1))
+    lid_2 = LearnerID((0, 2))
+
+    performances = {
+        lid_1: DummyModel(),
+        lid_2: DummyModel()
+    }
+
+    next_layer = strategy.generate_next_layer(
+        current_learner_ids={lid_1, lid_2},
+        prior_learners=performances,
+        num_best=2,
+    )
+
+    expected_layer = {
+        LearnerID((0,))
+    }
+    assert next_layer == expected_layer
+
+    # Check terminal condition
+    terminal_lid = expected_layer.pop()
+    performances[terminal_lid] = DummyModel()
+    final_layer = strategy.generate_next_layer(
+        {terminal_lid},
+        performances
+    )
+    assert not final_layer

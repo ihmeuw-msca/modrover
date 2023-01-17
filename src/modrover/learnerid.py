@@ -91,3 +91,6 @@ class LearnerID:
 
     def __len__(self) -> int:
         return len(self.cov_ids)
+
+    def __repr__(self):
+        return repr(self.cov_ids)
