@@ -24,7 +24,7 @@ class RoverStrategy(ABC):
     def generate_next_layer(
             self,
             current_learner_ids: Set[LearnerID],
-            performances: Dict[LearnerID, Learner]) -> Iterable:
+            prior_learners: Dict[LearnerID, Learner]) -> Iterable:
         """Abstract method to generate the next set of learner IDs."""
         raise NotImplementedError
 

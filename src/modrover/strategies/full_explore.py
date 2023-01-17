@@ -9,6 +9,7 @@ class FullExplore(RoverStrategy):
 
     def __init__(self, num_covariates: int):
         super().__init__(num_covariates)
+        self.base_learnerid = LearnerID((0,))
 
     def generate_next_layer(self, *args, **kwargs) -> Generator:
         """Find every single possible learner ID combination, return in a single layer."""

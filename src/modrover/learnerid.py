@@ -91,4 +91,3 @@ class LearnerID:
 
     def __len__(self) -> int:
         return len(self.cov_ids)
-

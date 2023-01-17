@@ -17,24 +17,7 @@ class Rover:
         self.performances = {}
         self.num_covariates = num_covariates
 
-    def explore(self, strategy: str):
-        strategy_class = strategy_type_dict[strategy]
-        concrete_strategy = strategy_class()
-        base = concrete_strategy.base_learnerid
-        previous_layer_ids = set()
-        current_ids = {base}
 
-        while current_ids:
-            for learner_id in current_ids:
-                if learner_id not in self.performances:
-                    learner = Learner(learner_id)
-                    learner.fit()
-                    self.performances[learner_id] = learner
-            next_ids = concrete_strategy.generate_next_layer(
-                current_ids, self.performances, previous_layer_ids)
-            previous_layer_ids = current_ids
-            current_ids = next_ids
-        return
 
     def collect(self) -> pd.DataFrame:
         sub_dirs = map(
