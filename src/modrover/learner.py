@@ -166,7 +166,6 @@ class Learner:
         if self.performance:
             # Learner already has been fit, exit early
             return
-
         if holdout_cols:
             # If holdout cols are provided, loop through to calculate OOS performance
             performance = 0.
@@ -244,3 +243,6 @@ class Learner:
         model.data.detach_df()
 
         return performance
+
+    def __repr__(self):
+        return f"Learner({self.cov_ids})"

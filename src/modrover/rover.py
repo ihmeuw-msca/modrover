@@ -20,6 +20,7 @@ class Rover:
         extra_param_specs: Optional[dict[str, dict]] = None,
         offset: str = "offset",
         weights: str = "weights",
+        holdout_cols: Optional[list[str]] = None,
         model_eval_metric: Callable = get_rmse,
     ) -> None:
         # parse extra_param_specs
@@ -33,6 +34,7 @@ class Rover:
         self.extra_param_specs = extra_param_specs
         self.offset = offset
         self.weights = weights
+        self.holdout_cols = holdout_cols
         self.model_eval_metric = model_eval_metric
 
         self.learners: dict[LearnerID, Learner] = {}
@@ -106,5 +108,6 @@ class Rover:
     def _fit_layer(self, dataset: pd.DataFrame, learners: list[Learner]) -> None:
         """Fit a layer of models. Store results on the learners dict."""
         for learner in learners:
-            learner.fit(dataset)  # TODO: add holdout cols for CV
+            print(learner)
+            learner.fit(dataset, self.holdout_cols)
             self.learners[learner.learner_id] = learner

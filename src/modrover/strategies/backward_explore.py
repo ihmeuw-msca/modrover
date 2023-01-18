@@ -19,7 +19,7 @@ class BackwardExplore(RoverStrategy):
         """
         The backward strategy will select a set of learner IDs numbering one less.
 
-        E.g. if the full set of ids is 1-5, and our current is (0,1, 2)
+        E.g. if the full set of ids is 1-5, and our current is (0,1,2)
 
         The downstreams will be (0,1), (0,2)
 
