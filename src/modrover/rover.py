@@ -5,8 +5,8 @@ import pandas as pd
 from .globals import get_rmse
 from .learner import Learner
 from .learnerid import LearnerID
-from .strategies.base import RoverStrategy
 from .strategies import get_strategy
+from .strategies.base import RoverStrategy
 
 
 class Rover:
@@ -15,23 +15,23 @@ class Rover:
         self,
         model_type: str,
         y: str,
-        cov_fixed: dict[str, list[str]],
-        cov_explore: dict[str, list[str]],
-        extra_param_specs: Optional[dict[str, dict]] = None,
+        col_fixed: dict[str, list[str]],
+        col_explore: dict[str, list[str]],
+        param_specs: Optional[dict[str, dict]] = None,
         offset: str = "offset",
         weights: str = "weights",
         holdout_cols: Optional[list[str]] = None,
         model_eval_metric: Callable = get_rmse,
     ) -> None:
-        # parse extra_param_specs
-        if extra_param_specs is None:
-            extra_param_specs = {}
+        # parse param_specs
+        if param_specs is None:
+            param_specs = {}
 
         self.model_type = model_type
         self.y = y
-        self.cov_fixed = cov_fixed
-        self.cov_explore = cov_explore
-        self.extra_param_specs = extra_param_specs
+        self.col_fixed = col_fixed
+        self.col_explore = col_explore
+        self.param_specs = param_specs
         self.offset = offset
         self.weights = weights
         self.holdout_cols = holdout_cols
@@ -50,16 +50,16 @@ class Rover:
 
         all_covariates = list(self.cov_explore.values())[0]
         param_specs = {}
-        for param_name, covs in self.cov_fixed.items():
+        for param_name, covs in self.col_fixed.items():
             variables = covs.copy()
-            if param_name in self.cov_explore:
+            if param_name in self.col_explore:
                 variables.extend([
                     all_covariates[i - 1] for i in learner_id.cov_ids
                 ])
             param_specs[param_name] = {}
             param_specs[param_name]["variables"] = variables
             param_specs[param_name].update(
-                self.extra_param_specs.get(param_name, {})
+                self.param_specs.get(param_name, {})
             )
         return Learner(
             learner_id,
