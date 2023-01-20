@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from modrover.rover import Rover
-from modrover.learnerid import LearnerID
+from modrover.learner import LearnerID
 
 
 def test_rover():

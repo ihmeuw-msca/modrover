@@ -2,7 +2,7 @@ from contextlib import nullcontext as does_not_raise
 
 import pytest
 
-from modrover.learnerid import LearnerID
+from modrover.learner import LearnerID
 
 
 @pytest.mark.parametrize(

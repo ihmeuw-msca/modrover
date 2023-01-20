@@ -1,5 +1,4 @@
-from modrover.learner import Learner
-from modrover.learnerid import LearnerID
+from modrover.learner import Learner, LearnerID
 from modrover.strategies import ForwardExplore, FullExplore, BackwardExplore
 from modrover.strategies.base import RoverStrategy
 

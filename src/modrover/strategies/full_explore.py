@@ -1,7 +1,7 @@
 from itertools import combinations
 from typing import Generator
 
-from modrover.learnerid import LearnerID
+from modrover.learner import LearnerID
 from modrover.strategies.base import RoverStrategy
 
 

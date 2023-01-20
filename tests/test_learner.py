@@ -2,8 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from modrover.learner import Learner
-from modrover.learnerid import LearnerID
+from modrover.learner import Learner, LearnerID
 
 
 @pytest.fixture

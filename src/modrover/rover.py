@@ -3,8 +3,7 @@ from typing import Callable, Optional, Union
 import pandas as pd
 
 from .globals import get_rmse
-from .learner import Learner
-from .learnerid import LearnerID
+from .learner import Learner, LearnerID
 from .strategies.base import RoverStrategy
 from .strategies import get_strategy
 
