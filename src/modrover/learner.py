@@ -192,7 +192,6 @@ class Learner:
     def _fit(self, model: RegmodModel, data: DataFrame, **optimizer_options) -> None:
 
         model.attach_df(data)
-
         mat = model.mat[0]
         if np.linalg.matrix_rank(mat) < mat.shape[1]:
             warn(f"Singular design matrix {self.cov_ids=:}")

@@ -19,10 +19,10 @@ def test_rover():
     rover = Rover(
         model_type='gaussian',
         y='y',
-        cov_fixed={'mu': []},
+        cov_fixed={'mu': ['intercept']},
         cov_explore={'mu': ['var_a']},
         holdout_cols=['holdout']
     )
 
-    # TODO: For Learner(0, 1), get a singular design matrix and no coefficients. Investigate
-    # rover.explore(dataset=dataframe, strategy='forward')
+    rover.explore(dataset=dataframe, strategy='full')
+    assert set(rover.learners.keys()) == {(0,), (0, 1)}
