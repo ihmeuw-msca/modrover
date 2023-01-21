@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from modrover.rover import Rover
 from modrover.learner import LearnerID
+from modrover.rover import Rover
 
 
 def test_rover():
@@ -19,8 +19,8 @@ def test_rover():
     rover = Rover(
         model_type='gaussian',
         y='y',
-        cov_fixed={'mu': ['intercept']},
-        cov_explore={'mu': ['var_a']},
+        col_fixed={'mu': ['intercept']},
+        col_explore={'mu': ['var_a']},
         holdout_cols=['holdout']
     )
 
