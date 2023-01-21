@@ -4,7 +4,6 @@ import pandas as pd
 
 from .globals import get_rmse
 from .learner import Learner, LearnerID
-from .strategies.base import RoverStrategy
 from .strategies import get_strategy
 from .strategies.base import RoverStrategy
 
@@ -53,7 +52,7 @@ class Rover:
         if learner_id in self.learners:
             return self.learners[learner_id]
 
-        all_covariates = list(self.cov_explore.values())[0]
+        all_covariates = list(self.col_explore.values())[0]
         param_specs = {}
         for param_name, covs in self.col_fixed.items():
             variables = covs.copy()
@@ -90,7 +89,7 @@ class Rover:
             # If a string is provided, select a strategy for the user.
             strategy_class = get_strategy(strategy)
             strategy = strategy_class(
-                num_covariates=len(list(self.cov_explore.values())[0]),
+                num_covariates=len(list(self.col_explore.values())[0]),
             )
 
         current_ids = {strategy.base_learnerid}
