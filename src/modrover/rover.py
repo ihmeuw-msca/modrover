@@ -3,8 +3,8 @@ from typing import Callable, Optional, Union
 import pandas as pd
 
 from .globals import get_rmse
-from .learner import Learner
-from .learnerid import LearnerID
+from .learner import Learner, LearnerID
+from .strategies.base import RoverStrategy
 from .strategies import get_strategy
 from .strategies.base import RoverStrategy
 
@@ -42,6 +42,11 @@ class Rover:
         # TODO: validate the inputs
         # ...
 
+    @property
+    def performances(self):
+        """Convenience property to select only the performance of each learner."""
+        return {lid: learner.performance for lid, learner in self.learners.items()}
+
     def get_learner(self, learner_id: LearnerID) -> Learner:
 
         # See if we've already initialized one
@@ -54,7 +59,8 @@ class Rover:
             variables = covs.copy()
             if param_name in self.col_explore:
                 variables.extend([
-                    all_covariates[i - 1] for i in learner_id.cov_ids
+                    # Ignore the always-present 0 index. Results in duplicate column names.
+                    all_covariates[i - 1] for i in learner_id.cov_ids[1:]
                 ])
             param_specs[param_name] = {}
             param_specs[param_name]["variables"] = variables
@@ -102,7 +108,7 @@ class Rover:
                 current_learner_ids=current_ids,
                 prior_learners=self.learners
             )
-            current_ids = next_ids
+            current_ids = set(next_ids)
         return
 
     def _fit_layer(self, dataset: pd.DataFrame, learners: list[Learner]) -> None:

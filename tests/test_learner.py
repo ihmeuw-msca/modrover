@@ -2,8 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from modrover.learner import Learner
-from modrover.learnerid import LearnerID
+from modrover.learner import Learner, LearnerID
 
 
 @pytest.fixture
@@ -54,7 +53,7 @@ def test_model_init(model_specs):
 
 def test_model_fit(dataset, model_specs):
 
-    learner_id = LearnerID(cov_ids=(0, 1, 2, 3))
+    learner_id = LearnerID(cov_ids=(0, 1, 2, 3, 4, 5, 6))
     model = Learner(learner_id=learner_id, **model_specs)
 
     # Fit the model, don't check for correctness

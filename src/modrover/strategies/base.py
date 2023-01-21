@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Iterable, Set
 
-from modrover.learnerid import LearnerID
-from modrover.learner import Learner
+from modrover.learner import Learner, LearnerID
 
 
 class RoverStrategy(ABC):
