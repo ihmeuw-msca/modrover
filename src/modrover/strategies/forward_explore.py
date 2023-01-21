@@ -38,7 +38,7 @@ class ForwardExplore(RoverStrategy):
             num_best=num_best
         )
         for learner_id in remaining_cov_ids:
-            candidate_ids = learner_id.create_children(self.num_covariates)
+            candidate_ids = self.create_children(learner_id)
             next_learner_ids |= set(candidate_ids)
         return next_learner_ids
 
@@ -46,4 +46,4 @@ class ForwardExplore(RoverStrategy):
         """Return the possible previous nodes.
 
         For DownExplore, this is the current learner id's parents."""
-        return set(learner_id.create_parents())
+        return self.create_parents(learner_id)
