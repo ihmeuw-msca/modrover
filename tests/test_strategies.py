@@ -1,5 +1,5 @@
 from modrover.learner import Learner, LearnerID
-from modrover.strategies import ForwardExplore, FullExplore, BackwardExplore
+from modrover.strategies import BackwardExplore, ForwardExplore, FullExplore
 from modrover.strategies.base import RoverStrategy
 
 
@@ -160,8 +160,8 @@ def test_full_explore():
         (0, 2, 3),
         (0, 1, 2, 3),
     }
-    expected_learnerids = set(map(LearnerID, expected_combos))
-    assert all_ids == expected_learnerids
+    expected_learner_ids = set(map(LearnerID, expected_combos))
+    assert all_ids == expected_learner_ids
 
     # Check that a second call results in an empty generator
     second_layer = set(full_strategy.generate_next_layer())

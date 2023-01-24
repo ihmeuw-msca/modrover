@@ -92,7 +92,7 @@ class Rover:
                 num_covariates=len(list(self.col_explore.values())[0]),
             )
 
-        current_ids = {strategy.base_learnerid}
+        current_ids = {strategy.base_learner_id}
 
         while current_ids:
             current_learners = []

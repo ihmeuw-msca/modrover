@@ -9,7 +9,7 @@ class FullExplore(RoverStrategy):
 
     def __init__(self, num_covariates: int):
         super().__init__(num_covariates)
-        self.base_learnerid = (0,)
+        self.base_learner_id = (0,)
         self.called = False
 
     def generate_next_layer(self, *args, **kwargs) -> Generator:

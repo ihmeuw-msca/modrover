@@ -17,7 +17,7 @@ class RoverStrategy(ABC):
     @abstractmethod
     def __init__(self, num_covariates: int):
         self.num_covariates = num_covariates
-        self.base_learnerid: LearnerID
+        self.base_learner_id: LearnerID
 
     @abstractmethod
     def generate_next_layer(
