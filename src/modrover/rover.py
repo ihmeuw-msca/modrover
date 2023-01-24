@@ -59,7 +59,7 @@ class Rover:
             if param_name in self.col_explore:
                 variables.extend([
                     # Ignore the always-present 0 index. Results in duplicate column names.
-                    all_covariates[i - 1] for i in learner_id.cov_ids[1:]
+                    all_covariates[i - 1] for i in learner_id[1:]
                 ])
             param_specs[param_name] = {}
             param_specs[param_name]["variables"] = variables

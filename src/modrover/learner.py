@@ -12,6 +12,8 @@ from regmod.variable import Variable
 
 from .globals import get_rmse, model_type_dict
 
+LearnerID = tuple[int, ...]
+
 
 class Learner:
 
@@ -65,10 +67,6 @@ class Learner:
                 Variable, param_spec["variables"]
             ))
         self.param_specs = param_specs
-
-    @property
-    def cov_ids(self) -> tuple[int]:
-        return self.learner_id.cov_ids
 
     @property
     def opt_coefs(self) -> Optional[np.ndarray]:
@@ -193,7 +191,7 @@ class Learner:
         model.attach_df(data)
         mat = model.mat[0]
         if np.linalg.matrix_rank(mat) < mat.shape[1]:
-            warn(f"Singular design matrix {self.cov_ids=:}")
+            warn(f"Singular design matrix {self.learner_id=:}")
             return
 
         model.fit(**optimizer_options)
@@ -243,4 +241,4 @@ class Learner:
         return performance
 
     def __repr__(self):
-        return f"Learner({self.cov_ids})"
+        return f"Learner({self.learner_id})"
