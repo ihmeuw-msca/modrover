@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Iterable, Set
+from typing import Iterable
 
 from modrover.learner import Learner, LearnerID
 
@@ -22,8 +22,8 @@ class RoverStrategy(ABC):
     @abstractmethod
     def generate_next_layer(
             self,
-            current_learner_ids: Set[LearnerID],
-            prior_learners: Dict[LearnerID, Learner]) -> Iterable:
+            current_learner_ids: set[LearnerID],
+            prior_learners: dict[LearnerID, Learner]) -> Iterable:
         """Abstract method to generate the next set of learner IDs."""
         raise NotImplementedError
 
@@ -62,7 +62,7 @@ class RoverStrategy(ABC):
 
         return tuple(cov_ids)
 
-    def create_children(self, learner_id: tuple[int]) -> set[LearnerID]:
+    def _get_learner_id_children(self, learner_id: LearnerID) -> set[LearnerID]:
         """
         Create a new set of child covariate ID combinations based on the current one.
         As an example, if we have 5 total covariates 1-5, and our current covariate ID
@@ -71,14 +71,14 @@ class RoverStrategy(ABC):
         :param num_covs: total number of covariates represented
         :return: A list of LearnerID classes wrapping the child covariate ID tuples
         """
-        all_covs = set(range(1, self.num_covariates + 1))
-        remaining_covs = all_covs - set(learner_id)
+        all_covs_ids = set(range(1, self.num_covariates + 1))
+        remaining_cov_ids = all_covs_ids - set(learner_id)
         children = {
-            self._as_learner_id((*learner_id, cov))
-            for cov in remaining_covs}
+            self._as_learner_id((*learner_id, cov_id))
+            for cov_id in remaining_cov_ids}
         return children
 
-    def create_parents(self, learner_id: tuple[int]) -> set[LearnerID]:
+    def _get_learner_id_parents(self, learner_id: LearnerID) -> set[LearnerID]:
         """
         Create a parent LearnerID class with one less covariate than the current modelid.
         As an example, if our current covariate_id tuple is (0,1,2),
