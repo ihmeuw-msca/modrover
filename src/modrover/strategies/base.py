@@ -39,7 +39,7 @@ class RoverStrategy(ABC):
         """
         raise NotImplementedError
 
-    def _validate_covariate_ids(self, cov_ids: tuple[int, ...]) -> tuple[int, ...]:
+    def _as_learner_id(self, cov_ids: tuple[int, ...]) -> LearnerID:
         """
         Validate the provided covariate_id set by the number of total covariates.
 
@@ -62,7 +62,7 @@ class RoverStrategy(ABC):
 
         return tuple(cov_ids)
 
-    def create_children(self, learner_id: tuple[int]) -> set[tuple[int]]:
+    def create_children(self, learner_id: tuple[int]) -> set[LearnerID]:
         """
         Create a new set of child covariate ID combinations based on the current one.
         As an example, if we have 5 total covariates 1-5, and our current covariate ID
@@ -74,11 +74,11 @@ class RoverStrategy(ABC):
         all_covs = set(range(1, self.num_covariates + 1))
         remaining_covs = all_covs - set(learner_id)
         children = {
-            self._validate_covariate_ids((*learner_id, cov))
+            self._as_learner_id((*learner_id, cov))
             for cov in remaining_covs}
         return children
 
-    def create_parents(self, learner_id: tuple[int]) -> set[tuple[int]]:
+    def create_parents(self, learner_id: tuple[int]) -> set[LearnerID]:
         """
         Create a parent LearnerID class with one less covariate than the current modelid.
         As an example, if our current covariate_id tuple is (0,1,2),
@@ -86,7 +86,7 @@ class RoverStrategy(ABC):
         :return:
         """
         parents = {
-            self._validate_covariate_ids((*learner_id[:i], *learner_id[(i + 1):]))
+            self._as_learner_id((*learner_id[:i], *learner_id[(i + 1):]))
             for i in range(1, len(learner_id))
         }
         return parents
