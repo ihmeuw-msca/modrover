@@ -6,7 +6,7 @@ class BackwardExplore(RoverStrategy):
 
     def __init__(self, num_covariates: int):
         super().__init__(num_covariates)
-        self.base_learnerid = LearnerID(tuple(range(num_covariates + 1)))
+        self.base_learner_id = tuple(range(num_covariates + 1))
 
     def generate_next_layer(
             self,
@@ -36,7 +36,7 @@ class BackwardExplore(RoverStrategy):
             num_best=num_best
         )
         for learner_id in remaining_cov_ids:
-            candidate_ids = learner_id.create_parents()
+            candidate_ids = self._get_learner_id_parents(learner_id)
             next_learner_ids |= set(candidate_ids)
         return next_learner_ids
 
@@ -44,4 +44,4 @@ class BackwardExplore(RoverStrategy):
         """Return the possible previous nodes.
 
         For UpExplore, this is the current learner id's children."""
-        return set(learner_id.create_children(self.num_covariates))
+        return self._get_learner_id_children(learner_id)

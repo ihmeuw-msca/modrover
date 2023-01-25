@@ -10,6 +10,6 @@ def test_get_learner():
         col_explore={"mu": ["cov1", "cov2", "cov3"]},
     )
 
-    learner = rover.get_learner(LearnerID((0, 1, 2)))
+    learner = rover.get_learner((0, 1, 2))
 
     assert isinstance(learner, Learner)

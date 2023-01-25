@@ -1,5 +1,9 @@
+from contextlib import nullcontext as does_not_raise
+
+import pytest
+
 from modrover.learner import Learner, LearnerID
-from modrover.strategies import ForwardExplore, FullExplore, BackwardExplore
+from modrover.strategies import BackwardExplore, ForwardExplore, FullExplore
 from modrover.strategies.base import RoverStrategy
 
 
@@ -27,7 +31,7 @@ def test_basic_filtering():
     num_covs = 5
 
     base_strategy = DummyStrategy(num_covariates=num_covs)
-    first_layer = [LearnerID((0, i,)) for i in range(1, num_covs + 1)]
+    first_layer = [(0, i,) for i in range(1, num_covs + 1)]
 
     # Test 1: select the n best prior_learners
     base_perf = 0
@@ -56,8 +60,8 @@ def test_parent_ratio():
     strategy = BackwardExplore(4)
 
     # Initialize a set of model ids and their children
-    lid_1 = LearnerID((0, 1))
-    lid_2 = LearnerID((0, 2))
+    lid_1 = (0, 1)
+    lid_2 = (0, 2)
 
     # Mock up some performances
     performances = {
@@ -65,8 +69,9 @@ def test_parent_ratio():
         lid_2: DummyModel(10)
     }
 
-    upstreams = strategy.get_upstream_learner_ids(lid_1).\
-        union(strategy.get_upstream_learner_ids(lid_2))
+    upstreams = strategy.get_upstream_learner_ids(lid_1).union(
+        strategy.get_upstream_learner_ids(lid_2)
+    )
     for lid in upstreams:
         performances[lid] = DummyModel(7)
 
@@ -85,8 +90,8 @@ def test_parent_ratio():
 def test_generate_forward_layer():
 
     strategy = ForwardExplore(3)
-    lid_1 = LearnerID((0, 1))
-    lid_2 = LearnerID((0, 2))
+    lid_1 = (0, 1)
+    lid_2 = (0, 2)
 
     performances = {
         lid_1: DummyModel(),
@@ -100,14 +105,14 @@ def test_generate_forward_layer():
     )
 
     expected_layer = {
-        LearnerID((0, 1, 2)),
-        LearnerID((0, 2, 3)),
-        LearnerID((0, 1, 3))
+        (0, 1, 2),
+        (0, 2, 3),
+        (0, 1, 3)
     }
     assert next_layer == expected_layer
 
     # Check terminal condition
-    terminal_lid = LearnerID((0, 1, 2, 3))
+    terminal_lid = (0, 1, 2, 3)
     performances[terminal_lid] = DummyModel()
     final_layer = strategy.generate_next_layer(
         {terminal_lid},
@@ -118,8 +123,8 @@ def test_generate_forward_layer():
 
 def test_generate_backward_layer():
     strategy = BackwardExplore(3)
-    lid_1 = LearnerID((0, 1))
-    lid_2 = LearnerID((0, 2))
+    lid_1 = (0, 1)
+    lid_2 = (0, 2)
 
     performances = {
         lid_1: DummyModel(),
@@ -133,7 +138,7 @@ def test_generate_backward_layer():
     )
 
     expected_layer = {
-        LearnerID((0,))
+        (0,)
     }
     assert next_layer == expected_layer
 
@@ -160,9 +165,68 @@ def test_full_explore():
         (0, 2, 3),
         (0, 1, 2, 3),
     }
-    expected_learnerids = set(map(LearnerID, expected_combos))
-    assert all_ids == expected_learnerids
+    expected_learner_ids = set(map(LearnerID, expected_combos))
+    assert all_ids == expected_learner_ids
 
     # Check that a second call results in an empty generator
     second_layer = set(full_strategy.generate_next_layer())
     assert not second_layer
+
+
+@pytest.mark.parametrize(
+    "input_cov_id,validated_cov_id,expectation",
+    [
+        # Duplicated ints
+        ((0, 1, 2, 3, 3, 3), (0, 1, 2, 3), does_not_raise()),
+        # Include fixed if not present
+        ((1, 2, 3), (0, 1, 2, 3), does_not_raise()),
+        # Non ints
+        (('1', '2', '3'), (0, 1, 2, 3), does_not_raise()),
+        # Negatives should fail
+        ((-1, 1, 3), None, pytest.raises(ValueError))
+    ]
+)
+def test_as_learner_id(input_cov_id, validated_cov_id, expectation):
+    strategy = FullExplore(3)
+    with expectation:
+        learner_id = strategy._as_learner_id(input_cov_id)
+        if validated_cov_id:
+            assert learner_id == validated_cov_id
+
+
+def test_learnerid_initialization():
+    strategy = FullExplore(3)
+    # Check that the correct cov_ids are set
+    learner_id = strategy._as_learner_id((1, 2, 3))
+    assert learner_id == (0, 1, 2, 3)
+
+
+def test_get_learner_id_children():
+    strategy = FullExplore(5)
+    # Check children generation
+    learner_id = strategy._as_learner_id((1, 2, 3))
+    children = strategy._get_learner_id_children(learner_id)
+    assert len(children) == 2
+
+    expected_children = {(0, 1, 2, 3, 4), (0, 1, 2, 3, 5)}
+    assert expected_children == children
+
+    # Check no more children generated when all covariates are represented
+    strategy = FullExplore(3)
+    learner_id = strategy._as_learner_id((0, 1, 2, 3))
+    assert not any(strategy._get_learner_id_children(learner_id))
+
+
+def test_learnerid_parents():
+    strategy = FullExplore(5)
+    # Check parent generation
+    learner_id = strategy._as_learner_id((1, 2, 3))
+    parents = strategy._get_learner_id_parents(learner_id)
+
+    expected_parents = {(0, 2, 3), (0, 1, 3), (0, 1, 2)}
+    assert len(parents) == 3
+    assert expected_parents == parents
+
+    # assert that the base model has no parents
+    learner_id = strategy._as_learner_id(())
+    assert not any(strategy._get_learner_id_parents(learner_id))

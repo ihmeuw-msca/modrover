@@ -38,7 +38,7 @@ def model_specs():
 
 def test_model_init(model_specs):
     # Arbitrary: select first 2 covariates out of 5
-    learner_id = LearnerID(cov_ids=(0, 1, 2, 3))
+    learner_id = (0, 1, 2, 3)
     model = Learner(learner_id=learner_id, **model_specs)
     # Check that model is "new"
     assert not model.has_been_fit
@@ -53,7 +53,7 @@ def test_model_init(model_specs):
 
 def test_model_fit(dataset, model_specs):
 
-    learner_id = LearnerID(cov_ids=(0, 1, 2, 3, 4, 5, 6))
+    learner_id = (0, 1, 2, 3, 4, 5, 6)
     model = Learner(learner_id=learner_id, **model_specs)
 
     # Fit the model, don't check for correctness
@@ -68,7 +68,7 @@ def test_two_param_model_fit(dataset):
 
     # Sample two param model: a,b,c are mapped to mu, d,e to sigma
 
-    learner_id = LearnerID(cov_ids=(0, 1, 2))
+    learner_id = (0, 1, 2)
 
     model = Learner(
         learner_id=learner_id,
@@ -97,7 +97,7 @@ def test_two_param_model_fit(dataset):
 
 def test_initialize_model_with_coefs(model_specs):
 
-    learner_id = LearnerID(cov_ids=(0, 1, 2, 3))
+    learner_id = (0, 1, 2, 3)
     model = Learner(learner_id=learner_id, **model_specs)
 
     # Set some known coefficients, random number

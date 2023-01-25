@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Iterable, Set
+from typing import Iterable
 
 from modrover.learner import Learner, LearnerID
 
@@ -17,13 +17,13 @@ class RoverStrategy(ABC):
     @abstractmethod
     def __init__(self, num_covariates: int):
         self.num_covariates = num_covariates
-        self.base_learnerid: LearnerID
+        self.base_learner_id: LearnerID
 
     @abstractmethod
     def generate_next_layer(
             self,
-            current_learner_ids: Set[LearnerID],
-            prior_learners: Dict[LearnerID, Learner]) -> Iterable:
+            current_learner_ids: set[LearnerID],
+            prior_learners: dict[LearnerID, Learner]) -> Iterable:
         """Abstract method to generate the next set of learner IDs."""
         raise NotImplementedError
 
@@ -38,6 +38,58 @@ class RoverStrategy(ABC):
         e.g. for DownExplore, the upstream IDs are going to be parents
         """
         raise NotImplementedError
+
+    def _as_learner_id(self, cov_ids: tuple[int, ...]) -> LearnerID:
+        """
+        Validate the provided covariate_id set by the number of total covariates.
+
+        :param cov_ids: Iterable of integer cov_ids
+        :param num_covs: Total number of covariates
+        :return: Validated cov_ids and num_covs
+        """
+        # Deduplicate cov_ids
+        cov_ids = set(cov_ids)
+        # Sort the covariate ids since we need them in a fixed order for mapping later
+        cov_ids = list(map(int, cov_ids))
+        cov_ids.sort()
+
+        if not all(map(lambda x: 0 <= x, cov_ids)):
+            raise ValueError("Cannot have negative covariate IDs")
+
+        if 0 not in cov_ids:
+            # Intercept always a fixed covariate, present in all models
+            cov_ids.insert(0, 0)
+
+        return tuple(cov_ids)
+
+    def _get_learner_id_children(self, learner_id: LearnerID) -> set[LearnerID]:
+        """
+        Create a new set of child covariate ID combinations based on the current one.
+        As an example, if we have 5 total covariates 1-5, and our current covariate ID
+        is (0,1,2), this will return
+        [(0,1,2,3), (0,1,2,4), (0,1,2,5)]
+        :param num_covs: total number of covariates represented
+        :return: A list of LearnerID classes wrapping the child covariate ID tuples
+        """
+        all_covs_ids = set(range(1, self.num_covariates + 1))
+        remaining_cov_ids = all_covs_ids - set(learner_id)
+        children = {
+            self._as_learner_id((*learner_id, cov_id))
+            for cov_id in remaining_cov_ids}
+        return children
+
+    def _get_learner_id_parents(self, learner_id: LearnerID) -> set[LearnerID]:
+        """
+        Create a parent LearnerID class with one less covariate than the current modelid.
+        As an example, if our current covariate_id tuple is (0,1,2),
+        this function will return [(0,1), (0,2)]
+        :return:
+        """
+        parents = {
+            self._as_learner_id((*learner_id[:i], *learner_id[(i + 1):]))
+            for i in range(1, len(learner_id))
+        }
+        return parents
 
     def _filter_learner_ids(
             self,

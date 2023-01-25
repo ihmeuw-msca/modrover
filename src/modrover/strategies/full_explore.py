@@ -9,7 +9,7 @@ class FullExplore(RoverStrategy):
 
     def __init__(self, num_covariates: int):
         super().__init__(num_covariates)
-        self.base_learnerid = LearnerID((0,))
+        self.base_learner_id = (0,)
         self.called = False
 
     def generate_next_layer(self, *args, **kwargs) -> Generator:
@@ -23,7 +23,7 @@ class FullExplore(RoverStrategy):
         else:
             all_learner_ids = list(range(1, self.num_covariates + 1))
             for num_elements in range(1, self.num_covariates + 1):
-                yield from map(LearnerID, combinations(all_learner_ids, num_elements))
+                yield from map(self._as_learner_id, combinations(all_learner_ids, num_elements))
             self.called = True
 
     def get_upstream_learner_ids(self, learner_id: LearnerID):

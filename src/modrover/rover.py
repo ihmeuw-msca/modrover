@@ -59,7 +59,7 @@ class Rover:
             if param_name in self.col_explore:
                 variables.extend([
                     # Ignore the always-present 0 index. Results in duplicate column names.
-                    all_covariates[i - 1] for i in learner_id.cov_ids[1:]
+                    all_covariates[i - 1] for i in learner_id[1:]
                 ])
             param_specs[param_name] = {}
             param_specs[param_name]["variables"] = variables
@@ -92,7 +92,7 @@ class Rover:
                 num_covariates=len(list(self.col_explore.values())[0]),
             )
 
-        current_ids = {strategy.base_learnerid}
+        current_ids = {strategy.base_learner_id}
 
         while current_ids:
             current_learners = []
