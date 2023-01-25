@@ -1,3 +1,7 @@
+from contextlib import nullcontext as does_not_raise
+
+import pytest
+
 from modrover.learner import Learner, LearnerID
 from modrover.strategies import BackwardExplore, ForwardExplore, FullExplore
 from modrover.strategies.base import RoverStrategy
@@ -167,3 +171,62 @@ def test_full_explore():
     # Check that a second call results in an empty generator
     second_layer = set(full_strategy.generate_next_layer())
     assert not second_layer
+
+
+@pytest.mark.parametrize(
+    "input_cov_id,validated_cov_id,expectation",
+    [
+        # Duplicated ints
+        ((0, 1, 2, 3, 3, 3), (0, 1, 2, 3), does_not_raise()),
+        # Include fixed if not present
+        ((1, 2, 3), (0, 1, 2, 3), does_not_raise()),
+        # Non ints
+        (('1', '2', '3'), (0, 1, 2, 3), does_not_raise()),
+        # Negatives should fail
+        ((-1, 1, 3), None, pytest.raises(ValueError))
+    ]
+)
+def test_as_learner_id(input_cov_id, validated_cov_id, expectation):
+    strategy = FullExplore(3)
+    with expectation:
+        learner_id = strategy._as_learner_id(input_cov_id)
+        if validated_cov_id:
+            assert learner_id == validated_cov_id
+
+
+def test_learnerid_initialization():
+    strategy = FullExplore(3)
+    # Check that the correct cov_ids are set
+    learner_id = strategy._as_learner_id((1, 2, 3))
+    assert learner_id == (0, 1, 2, 3)
+
+
+def test_get_learner_id_children():
+    strategy = FullExplore(5)
+    # Check children generation
+    learner_id = strategy._as_learner_id((1, 2, 3))
+    children = strategy._get_learner_id_children(learner_id)
+    assert len(children) == 2
+
+    expected_children = {(0, 1, 2, 3, 4), (0, 1, 2, 3, 5)}
+    assert expected_children == children
+
+    # Check no more children generated when all covariates are represented
+    strategy = FullExplore(3)
+    learner_id = strategy._as_learner_id((0, 1, 2, 3))
+    assert not any(strategy._get_learner_id_children(learner_id))
+
+
+def test_learnerid_parents():
+    strategy = FullExplore(5)
+    # Check parent generation
+    learner_id = strategy._as_learner_id((1, 2, 3))
+    parents = strategy._get_learner_id_parents(learner_id)
+
+    expected_parents = {(0, 2, 3), (0, 1, 3), (0, 1, 2)}
+    assert len(parents) == 3
+    assert expected_parents == parents
+
+    # assert that the base model has no parents
+    learner_id = strategy._as_learner_id(())
+    assert not any(strategy._get_learner_id_parents(learner_id))
