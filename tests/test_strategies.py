@@ -27,7 +27,7 @@ def test_basic_filtering():
     num_covs = 5
 
     base_strategy = DummyStrategy(num_covariates=num_covs)
-    first_layer = [LearnerID((0, i,)) for i in range(1, num_covs + 1)]
+    first_layer = [(0, i,) for i in range(1, num_covs + 1)]
 
     # Test 1: select the n best prior_learners
     base_perf = 0
@@ -56,8 +56,8 @@ def test_parent_ratio():
     strategy = BackwardExplore(4)
 
     # Initialize a set of model ids and their children
-    lid_1 = LearnerID((0, 1))
-    lid_2 = LearnerID((0, 2))
+    lid_1 = (0, 1)
+    lid_2 = (0, 2)
 
     # Mock up some performances
     performances = {
@@ -65,8 +65,9 @@ def test_parent_ratio():
         lid_2: DummyModel(10)
     }
 
-    upstreams = strategy.get_upstream_learner_ids(lid_1).\
-        union(strategy.get_upstream_learner_ids(lid_2))
+    upstreams = strategy.get_upstream_learner_ids(lid_1).union(
+        strategy.get_upstream_learner_ids(lid_2)
+    )
     for lid in upstreams:
         performances[lid] = DummyModel(7)
 
@@ -85,8 +86,8 @@ def test_parent_ratio():
 def test_generate_forward_layer():
 
     strategy = ForwardExplore(3)
-    lid_1 = LearnerID((0, 1))
-    lid_2 = LearnerID((0, 2))
+    lid_1 = (0, 1)
+    lid_2 = (0, 2)
 
     performances = {
         lid_1: DummyModel(),
@@ -100,14 +101,14 @@ def test_generate_forward_layer():
     )
 
     expected_layer = {
-        LearnerID((0, 1, 2)),
-        LearnerID((0, 2, 3)),
-        LearnerID((0, 1, 3))
+        (0, 1, 2),
+        (0, 2, 3),
+        (0, 1, 3)
     }
     assert next_layer == expected_layer
 
     # Check terminal condition
-    terminal_lid = LearnerID((0, 1, 2, 3))
+    terminal_lid = (0, 1, 2, 3)
     performances[terminal_lid] = DummyModel()
     final_layer = strategy.generate_next_layer(
         {terminal_lid},
@@ -118,8 +119,8 @@ def test_generate_forward_layer():
 
 def test_generate_backward_layer():
     strategy = BackwardExplore(3)
-    lid_1 = LearnerID((0, 1))
-    lid_2 = LearnerID((0, 2))
+    lid_1 = (0, 1)
+    lid_2 = (0, 2)
 
     performances = {
         lid_1: DummyModel(),
@@ -133,7 +134,7 @@ def test_generate_backward_layer():
     )
 
     expected_layer = {
-        LearnerID((0,))
+        (0,)
     }
     assert next_layer == expected_layer
 

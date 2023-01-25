@@ -6,7 +6,7 @@ class ForwardExplore(RoverStrategy):
 
     def __init__(self, num_covariates: int):
         super().__init__(num_covariates)
-        self.base_learner_id = LearnerID((0,))
+        self.base_learner_id = (0,)
 
     def generate_next_layer(
             self,
