@@ -45,16 +45,16 @@ def test_basic_filtering():
         performances[lid] = DummyModel(base_perf)
         base_perf += delta
 
-    best = base_strategy._filter_learner_ids(
-        current_layer=set(first_layer),
+    best = base_strategy._filter_curr_layer(
+        curr_layer=set(first_layer),
         learners=performances,
     )
     assert best == {first_layer[-1]}
 
-    best_two = base_strategy._filter_learner_ids(
-        current_layer=set(first_layer),
+    best_two = base_strategy._filter_curr_layer(
+        curr_layer=set(first_layer),
         learners=performances,
-        num_best=2
+        max_len=2
     )
     assert best_two == set(first_layer[-2:])
 
@@ -82,11 +82,11 @@ def test_parent_ratio():
     # LID 1 should have worse performance than its upstreams, so should not be explored further
     # LID 2 has better performance than all parents, so we should be exploring further
 
-    new_lids = strategy._filter_learner_ids(
-        current_layer={lid_1, lid_2},
+    new_lids = strategy._filter_curr_layer(
+        curr_layer={lid_1, lid_2},
         learners=performances,
-        num_best=2,
-        threshold=1
+        max_len=2,
+        min_improvement=1
     )
     assert new_lids == {lid_2}
 
@@ -103,9 +103,9 @@ def test_generate_forward_layer():
     }
 
     next_layer = strategy.get_next_layer(
-        current_layer={lid_1, lid_2},
+        curr_layer={lid_1, lid_2},
         learners=performances,
-        num_best=2,
+        max_len=2,
     )
 
     expected_layer = {
@@ -136,9 +136,9 @@ def test_generate_backward_layer():
     }
 
     next_layer = strategy.get_next_layer(
-        current_layer={lid_1, lid_2},
+        curr_layer={lid_1, lid_2},
         learners=performances,
-        num_best=2,
+        max_len=2,
     )
 
     expected_layer = {

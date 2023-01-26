@@ -92,22 +92,22 @@ class Rover:
                 num_covs=len(list(self.col_explore.values())[0]),
             )
 
-        current_ids = {strategy.base_learner_id}
+        curr_ids = {strategy.base_learner_id}
 
-        while current_ids:
-            current_learners = []
-            for learner_id in current_ids:
+        while curr_ids:
+            curr_learners = []
+            for learner_id in curr_ids:
                 learner = self.get_learner(learner_id)
 
                 if not learner.has_been_fit:
-                    current_learners.append(learner)
+                    curr_learners.append(learner)
 
-            self._fit_layer(dataset, current_learners)
+            self._fit_layer(dataset, curr_learners)
             next_ids = strategy.get_next_layer(
-                current_layer=current_ids,
+                curr_layer=curr_ids,
                 learners=self.learners
             )
-            current_ids = set(next_ids)
+            curr_ids = set(next_ids)
         return
 
     def _fit_layer(self, dataset: pd.DataFrame, learners: list[Learner]) -> None:

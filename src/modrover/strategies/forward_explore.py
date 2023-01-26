@@ -10,10 +10,10 @@ class ForwardExplore(RoverStrategy):
 
     def get_next_layer(
         self,
-        current_layer: set[LearnerID],
+        curr_layer: set[LearnerID],
         learners: dict[LearnerID, Learner],
-        threshold: float = 1.0,
-        num_best: int = 1,
+        min_improvement: float = 1.0,
+        max_len: int = 1,
     ) -> set[LearnerID]:
         """
         The down strategy will select a set of learner IDs numbering one more than the current.
@@ -22,18 +22,18 @@ class ForwardExplore(RoverStrategy):
 
         The children will be (0,1,2), (0,1,3), (0,1,4), (0,1,5)
 
-        :param current_layer: the current layer of learner IDs
+        :param curr_layer: the current layer of learner IDs
         :param learners: dictionary storing prior scored models
-        :param threshold: learners must out-perform parents by this ratio to continue exploring
-        :param num_best: the number of best learner IDs in this layer to propagate
+        :param min_improvement: learners must out-perform parents by this ratio to continue exploring
+        :param max_len: the number of best learner IDs in this layer to propagate
         :return:
         """
         next_learner_ids = set()
-        remaining_cov_ids = self._filter_learner_ids(
-            current_layer=current_layer,
+        remaining_cov_ids = self._filter_curr_layer(
+            curr_layer=curr_layer,
             learners=learners,
-            threshold=threshold,
-            num_best=num_best
+            min_improvement=min_improvement,
+            max_len=max_len
         )
         for learner_id in remaining_cov_ids:
             candidate_ids = self._get_learner_id_children(learner_id)

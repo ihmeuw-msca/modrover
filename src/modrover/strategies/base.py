@@ -23,7 +23,7 @@ class RoverStrategy(ABC):
     @abstractmethod
     def get_next_layer(
         self,
-        current_layer: set[LearnerID],
+        curr_layer: set[LearnerID],
         learners: dict[LearnerID, Learner]
     ) -> set[LearnerID]:
         """Abstract method to generate the next set of learner IDs."""
@@ -91,12 +91,13 @@ class RoverStrategy(ABC):
         }
         return parents
 
-    def _filter_learner_ids(
-            self,
-            current_layer: set[LearnerID],
-            learners: dict[LearnerID, Learner],
-            threshold: float = 1.0,
-            num_best: int = 1) -> set[LearnerID]:
+    def _filter_curr_layer(
+        self,
+        curr_layer: set[LearnerID],
+        learners: dict[LearnerID, Learner],
+        min_improvement: float = 1.0,
+        max_len: int = 1
+    ) -> set[LearnerID]:
         """Filter out low-performing covariate ids from selection.
 
         Algorithm:
@@ -104,24 +105,23 @@ class RoverStrategy(ABC):
         Drop if this candidate model performed worse than any of its parent
         Return the remainder
         """
-        sorted_learner_ids = sorted(current_layer,
-                                    key=lambda x: learners[x].performance)
-        # Select the n best
-        best_learner_ids = set(sorted_learner_ids[-num_best:])
+        sorted_learner_ids = sorted(
+            curr_layer,
+            key=lambda learner_id: learners[learner_id].performance
+        )
+        # Select the best max_len learner ids
+        learner_ids = set(sorted_learner_ids[-max_len:])
 
         # Compare to the comparison layer.
         learner_ids_to_remove = set()
-        for learner_id in best_learner_ids:
-            # If any upstream has a performance exceeding the current, don't explore the
-            # downstream ids.
-            upstreams = self.get_upstream_learner_ids(learner_id)
-            current_performance = learners[learner_id].performance
-            for upstream_learner_id in upstreams:
+        for learner_id in learner_ids:
+            upstream_learner_ids = self.get_upstream_learner_ids(learner_id)
+            curr_performance = learners[learner_id].performance
+            for upstream_learner_id in upstream_learner_ids:
                 if upstream_learner_id in learners:
-                    previous_performance = learners[upstream_learner_id].performance
-                    if current_performance / previous_performance < threshold:
-                        # Remove the current id from consideration
+                    prev_performance = learners[upstream_learner_id].performance
+                    if curr_performance / prev_performance < min_improvement:
                         learner_ids_to_remove.add(learner_id)
                         break
 
-        return best_learner_ids - learner_ids_to_remove
+        return learner_ids - learner_ids_to_remove
