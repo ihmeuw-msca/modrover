@@ -15,8 +15,8 @@ class RoverStrategy(ABC):
     """
 
     @abstractmethod
-    def __init__(self, num_covariates: int):
-        self.num_covariates = num_covariates
+    def __init__(self, num_covs: int):
+        self.num_covs = num_covs
         self.base_learner_id: LearnerID
 
     @abstractmethod
@@ -71,7 +71,7 @@ class RoverStrategy(ABC):
         :param num_covs: total number of covariates represented
         :return: A list of LearnerID classes wrapping the child covariate ID tuples
         """
-        all_covs_ids = set(range(1, self.num_covariates + 1))
+        all_covs_ids = set(range(1, self.num_covs + 1))
         remaining_cov_ids = all_covs_ids - set(learner_id)
         children = {
             self._as_learner_id((*learner_id, cov_id))

@@ -7,8 +7,8 @@ from modrover.strategies.base import RoverStrategy
 
 class FullExplore(RoverStrategy):
 
-    def __init__(self, num_covariates: int):
-        super().__init__(num_covariates)
+    def __init__(self, num_covs: int):
+        super().__init__(num_covs)
         self.base_learner_id = (0,)
         self.called = False
 
@@ -21,8 +21,8 @@ class FullExplore(RoverStrategy):
         if self.called:
             yield from set()
         else:
-            all_learner_ids = list(range(1, self.num_covariates + 1))
-            for num_elements in range(1, self.num_covariates + 1):
+            all_learner_ids = list(range(1, self.num_covs + 1))
+            for num_elements in range(1, self.num_covs + 1):
                 yield from map(self._as_learner_id, combinations(all_learner_ids, num_elements))
             self.called = True
 

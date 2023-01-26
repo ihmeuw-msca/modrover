@@ -16,8 +16,8 @@ class DummyModel(Learner):
 
 class DummyStrategy(RoverStrategy):
 
-    def __init__(self, num_covariates: int):
-        self.num_covariates = num_covariates
+    def __init__(self, num_covs: int):
+        self.num_covs = num_covs
 
     def generate_next_layer(self, *args, **kwargs):
         pass
@@ -30,7 +30,7 @@ def test_basic_filtering():
     """Test that we can select the best learner IDs based on past performance."""
     num_covs = 5
 
-    base_strategy = DummyStrategy(num_covariates=num_covs)
+    base_strategy = DummyStrategy(num_covs=num_covs)
     first_layer = [(0, i,) for i in range(1, num_covs + 1)]
 
     # Test 1: select the n best prior_learners

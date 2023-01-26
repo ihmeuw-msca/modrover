@@ -89,7 +89,7 @@ class Rover:
             # If a string is provided, select a strategy for the user.
             strategy_class = get_strategy(strategy)
             strategy = strategy_class(
-                num_covariates=len(list(self.col_explore.values())[0]),
+                num_covs=len(list(self.col_explore.values())[0]),
             )
 
         current_ids = {strategy.base_learner_id}

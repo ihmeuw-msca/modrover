@@ -4,8 +4,8 @@ from modrover.strategies.base import RoverStrategy
 
 class ForwardExplore(RoverStrategy):
 
-    def __init__(self, num_covariates: int):
-        super().__init__(num_covariates)
+    def __init__(self, num_covs: int):
+        super().__init__(num_covs)
         self.base_learner_id = (0,)
 
     def generate_next_layer(
