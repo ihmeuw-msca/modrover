@@ -42,7 +42,7 @@ class FullExplore(RoverStrategy):
             "the entire rest of the learner ids."
         )
 
-    def get_upstream_learner_ids(
+    def _get_upstream_learner_ids(
         self,
         learner_id: LearnerID,
         learners: dict[LearnerID, Learner],

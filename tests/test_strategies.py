@@ -23,7 +23,7 @@ class DummyStrategy(RoverStrategy):
     def get_next_layer(self, *args, **kwargs):
         pass
 
-    def get_upstream_learner_ids(self, *args, **kwargs):
+    def _get_upstream_learner_ids(self, *args, **kwargs):
         return set()
 
 
@@ -71,8 +71,8 @@ def test_parent_ratio():
         lid_2: DummyModel(10)
     }
 
-    upstreams = strategy.get_upstream_learner_ids(lid_1, learners).union(
-        strategy.get_upstream_learner_ids(lid_2, learners)
+    upstreams = strategy._get_upstream_learner_ids(lid_1, learners).union(
+        strategy._get_upstream_learner_ids(lid_2, learners)
     )
     for lid in upstreams:
         learners[lid] = DummyModel(7)

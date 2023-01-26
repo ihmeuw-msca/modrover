@@ -39,7 +39,7 @@ class ForwardExplore(RoverStrategy):
             next_layer |= self._get_learner_id_children(learner_id)
         return next_layer
 
-    def get_upstream_learner_ids(
+    def _get_upstream_learner_ids(
         self,
         learner_id: LearnerID,
         learners: dict[LearnerID, Learner],

@@ -31,7 +31,7 @@ class RoverStrategy(ABC):
         """Abstract method to generate the next set of learner IDs."""
 
     @abstractmethod
-    def get_upstream_learner_ids(
+    def _get_upstream_learner_ids(
         self,
         learner_id: LearnerID,
         learners: dict[LearnerID, Learner],
@@ -121,7 +121,7 @@ class RoverStrategy(ABC):
         # Compare to the comparison layer.
         learner_ids_to_remove = set()
         for learner_id in learner_ids:
-            upstream_learner_ids = self.get_upstream_learner_ids(
+            upstream_learner_ids = self._get_upstream_learner_ids(
                 learner_id,
                 learners,
             )
