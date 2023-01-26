@@ -27,26 +27,28 @@ class FullExplore(RoverStrategy):
     def get_next_layer(
         self,
         curr_layer: set[LearnerID],
-        learners: dict[LearnerID, Learner]
+        learners: dict[LearnerID, Learner],
+        **kwargs
     ) -> set[LearnerID]:
-        """Find every single possible learner ID combination, return in a single layer."""
-
-        # Return empty generator if we've already looked for the next layer.
-        # Reasoning: Fullexplore only has a single layer, so this has to be set to avoid
-        # infinite looping.
-
+        """Find every single possible learner ID combination, return in a
+        single layer.
+        """
         if curr_layer == self.first_layer:
             return self.second_layer
-        elif curr_layer == self.second_layer:
+        if curr_layer == self.second_layer:
             return set()
-        else:
-            raise ValueError(
-                "curr_layer can only be the set of base_learner_id or "
-                "the entire rest of the learner ids."
-            )
+        raise ValueError(
+            "curr_layer can only be the set of base_learner_id or "
+            "the entire rest of the learner ids."
+        )
 
-    def get_upstream_learner_ids(self, learner_id: LearnerID):
-        """This method is irrelevant for full explore.
-
-        There are no dependencies, we just fit every single combination of covariates."""
-        raise NotImplementedError
+    def get_upstream_learner_ids(
+        self,
+        learner_id: LearnerID,
+        learners: dict[LearnerID, Learner],
+    ) -> set[LearnerID]:
+        if learner_id == self.base_learner_id:
+            return set()
+        if learner_id in self.second_layer:
+            return self.first_layer & set(learners.keys())
+        raise ValueError("unrecognized learner_id")

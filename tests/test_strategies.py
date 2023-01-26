@@ -16,9 +16,6 @@ class DummyModel(Learner):
 
 class DummyStrategy(RoverStrategy):
 
-    def __init__(self, num_covs: int):
-        self.num_covs = num_covs
-
     @property
     def base_learner_id(self) -> LearnerID:
         return (0,)
@@ -61,30 +58,31 @@ def test_basic_filtering():
 
 def test_parent_ratio():
     """Test that we can drop learner ids with better performing upstreams."""
-    strategy = BackwardExplore(4)
+    strategy = BackwardExplore(2)
 
     # Initialize a set of model ids and their children
     lid_1 = (0, 1)
     lid_2 = (0, 2)
 
     # Mock up some performances
-    performances = {
+    learners = {
+        (0, 1, 2): DummyModel(7),
         lid_1: DummyModel(5),
         lid_2: DummyModel(10)
     }
 
-    upstreams = strategy.get_upstream_learner_ids(lid_1).union(
-        strategy.get_upstream_learner_ids(lid_2)
+    upstreams = strategy.get_upstream_learner_ids(lid_1, learners).union(
+        strategy.get_upstream_learner_ids(lid_2, learners)
     )
     for lid in upstreams:
-        performances[lid] = DummyModel(7)
+        learners[lid] = DummyModel(7)
 
     # LID 1 should have worse performance than its upstreams, so should not be explored further
     # LID 2 has better performance than all parents, so we should be exploring further
 
     new_lids = strategy._filter_curr_layer(
         curr_layer={lid_1, lid_2},
-        learners=performances,
+        learners=learners,
         max_len=2,
         min_improvement=1
     )

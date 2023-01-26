@@ -24,12 +24,17 @@ class RoverStrategy(ABC):
     def get_next_layer(
         self,
         curr_layer: set[LearnerID],
-        learners: dict[LearnerID, Learner]
+        learners: dict[LearnerID, Learner],
+        **kwargs
     ) -> set[LearnerID]:
         """Abstract method to generate the next set of learner IDs."""
 
     @abstractmethod
-    def get_upstream_learner_ids(self, learner_id: LearnerID) -> set[LearnerID]:
+    def get_upstream_learner_ids(
+        self,
+        learner_id: LearnerID,
+        learners: dict[LearnerID, Learner],
+    ) -> set[LearnerID]:
         """Given a learnerID, generate the upstream nodes.
 
         Regardless of the selected strategy, we should be able to guarantee at least one
@@ -115,13 +120,15 @@ class RoverStrategy(ABC):
         # Compare to the comparison layer.
         learner_ids_to_remove = set()
         for learner_id in learner_ids:
-            upstream_learner_ids = self.get_upstream_learner_ids(learner_id)
+            upstream_learner_ids = self.get_upstream_learner_ids(
+                learner_id,
+                learners,
+            )
             curr_performance = learners[learner_id].performance
             for upstream_learner_id in upstream_learner_ids:
-                if upstream_learner_id in learners:
-                    prev_performance = learners[upstream_learner_id].performance
-                    if curr_performance / prev_performance < min_improvement:
-                        learner_ids_to_remove.add(learner_id)
-                        break
+                prev_performance = learners[upstream_learner_id].performance
+                if curr_performance / prev_performance < min_improvement:
+                    learner_ids_to_remove.add(learner_id)
+                    break
 
         return learner_ids - learner_ids_to_remove

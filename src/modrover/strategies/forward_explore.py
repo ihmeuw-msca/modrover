@@ -40,8 +40,12 @@ class ForwardExplore(RoverStrategy):
             next_learner_ids |= set(candidate_ids)
         return next_learner_ids
 
-    def get_upstream_learner_ids(self, learner_id: LearnerID) -> set[LearnerID]:
+    def get_upstream_learner_ids(
+        self,
+        learner_id: LearnerID,
+        learners: dict[LearnerID, Learner],
+    ) -> set[LearnerID]:
         """Return the possible previous nodes.
-
-        For DownExplore, this is the current learner id's parents."""
-        return self._get_learner_id_parents(learner_id)
+        For ForwardExplore, this is the current learner id's parents.
+        """
+        return self._get_learner_id_parents(learner_id) & set(learners.keys())
