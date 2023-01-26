@@ -4,16 +4,16 @@ from modrover.strategies.base import RoverStrategy
 
 class ForwardExplore(RoverStrategy):
 
-    def __init__(self, num_covs: int):
+    def __init__(self, num_covs: int) -> None:
         super().__init__(num_covs)
         self.base_learner_id = (0,)
 
     def generate_next_layer(
-            self,
-            current_learner_ids: set[LearnerID],
-            learners: dict[LearnerID, Learner],
-            threshold: float = 1.0,
-            num_best: int = 1,
+        self,
+        current_learner_ids: set[LearnerID],
+        learners: dict[LearnerID, Learner],
+        threshold: float = 1.0,
+        num_best: int = 1,
     ) -> set[LearnerID]:
         """
         The down strategy will select a set of learner IDs numbering one more than the current.

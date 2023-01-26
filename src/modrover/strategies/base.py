@@ -15,20 +15,21 @@ class RoverStrategy(ABC):
     """
 
     @abstractmethod
-    def __init__(self, num_covs: int):
+    def __init__(self, num_covs: int) -> None:
         self.num_covs = num_covs
         self.base_learner_id: LearnerID
 
     @abstractmethod
     def generate_next_layer(
-            self,
-            current_learner_ids: set[LearnerID],
-            learners: dict[LearnerID, Learner]) -> Iterable:
+        self,
+        current_learner_ids: set[LearnerID],
+        learners: dict[LearnerID, Learner]
+    ) -> set[LearnerID]:
         """Abstract method to generate the next set of learner IDs."""
         raise NotImplementedError
 
     @abstractmethod
-    def get_upstream_learner_ids(self, learner_id: LearnerID):
+    def get_upstream_learner_ids(self, learner_id: LearnerID) -> set[LearnerID]:
         """Given a learnerID, generate the upstream nodes.
 
         Regardless of the selected strategy, we should be able to guarantee at least one

@@ -1,5 +1,4 @@
 from itertools import combinations
-from typing import Generator
 
 from modrover.learner import LearnerID
 from modrover.strategies.base import RoverStrategy
@@ -7,24 +6,30 @@ from modrover.strategies.base import RoverStrategy
 
 class FullExplore(RoverStrategy):
 
-    def __init__(self, num_covs: int):
+    def __init__(self, num_covs: int) -> None:
         super().__init__(num_covs)
         self.base_learner_id = (0,)
         self.called = False
 
-    def generate_next_layer(self, *args, **kwargs) -> Generator:
+    def generate_next_layer(self, *args, **kwargs) -> set[LearnerID]:
         """Find every single possible learner ID combination, return in a single layer."""
 
         # Return empty generator if we've already looked for the next layer.
         # Reasoning: Fullexplore only has a single layer, so this has to be set to avoid
         # infinite looping.
+
         if self.called:
-            yield from set()
-        else:
-            all_learner_ids = list(range(1, self.num_covs + 1))
-            for num_elements in range(1, self.num_covs + 1):
-                yield from map(self._as_learner_id, combinations(all_learner_ids, num_elements))
-            self.called = True
+            return set()
+
+        all_cov_ids = range(1, self.num_covs + 1)
+
+        remaining_learner_ids = set()
+        for num_elements in range(1, self.num_covs + 1):
+            remaining_learner_ids |= set(map(
+                self._as_learner_id, combinations(all_cov_ids, num_elements)
+            ))
+        self.called = True
+        return remaining_learner_ids
 
     def get_upstream_learner_ids(self, learner_id: LearnerID):
         """This method is irrelevant for full explore.
