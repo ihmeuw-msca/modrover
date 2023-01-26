@@ -19,6 +19,10 @@ class DummyStrategy(RoverStrategy):
     def __init__(self, num_covs: int):
         self.num_covs = num_covs
 
+    @property
+    def base_learner_id(self) -> LearnerID:
+        return (0,)
+
     def generate_next_layer(self, *args, **kwargs):
         pass
 
@@ -155,7 +159,10 @@ def test_generate_backward_layer():
 def test_full_explore():
     full_strategy = FullExplore(3)
 
-    all_ids = set(full_strategy.generate_next_layer())
+    second_layer = full_strategy.generate_next_layer(
+        full_strategy.first_layer,
+        dict()
+    )
     expected_combos = {
         (0, 1),
         (0, 2),
@@ -166,11 +173,14 @@ def test_full_explore():
         (0, 1, 2, 3),
     }
     expected_learner_ids = set(map(LearnerID, expected_combos))
-    assert all_ids == expected_learner_ids
+    assert second_layer == expected_learner_ids
 
     # Check that a second call results in an empty generator
-    second_layer = set(full_strategy.generate_next_layer())
-    assert not second_layer
+    empty_layer = full_strategy.generate_next_layer(
+        second_layer,
+        dict()
+    )
+    assert not empty_layer
 
 
 @pytest.mark.parametrize(

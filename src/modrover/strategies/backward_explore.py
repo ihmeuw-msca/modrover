@@ -4,9 +4,9 @@ from modrover.strategies.base import RoverStrategy
 
 class BackwardExplore(RoverStrategy):
 
-    def __init__(self, num_covs: int) -> None:
-        super().__init__(num_covs)
-        self.base_learner_id = tuple(range(num_covs + 1))
+    @property
+    def base_learner_id(self) -> LearnerID:
+        return tuple(range(self.num_covs + 1))
 
     def generate_next_layer(
         self,

@@ -1,5 +1,4 @@
-from abc import ABC, abstractmethod
-from typing import Iterable
+from abc import ABC, abstractmethod, abstractproperty
 
 from modrover.learner import Learner, LearnerID
 
@@ -14,10 +13,12 @@ class RoverStrategy(ABC):
 
     """
 
-    @abstractmethod
     def __init__(self, num_covs: int) -> None:
         self.num_covs = num_covs
-        self.base_learner_id: LearnerID
+
+    @abstractproperty
+    def base_learner_id(self) -> LearnerID:
+        """Starting learner id of the strategy"""
 
     @abstractmethod
     def generate_next_layer(
@@ -26,7 +27,6 @@ class RoverStrategy(ABC):
         learners: dict[LearnerID, Learner]
     ) -> set[LearnerID]:
         """Abstract method to generate the next set of learner IDs."""
-        raise NotImplementedError
 
     @abstractmethod
     def get_upstream_learner_ids(self, learner_id: LearnerID) -> set[LearnerID]:
@@ -38,7 +38,6 @@ class RoverStrategy(ABC):
         Note that this is going to search the opposite direction of the specified strategy.
         e.g. for DownExplore, the upstream IDs are going to be parents
         """
-        raise NotImplementedError
 
     def _as_learner_id(self, cov_ids: tuple[int, ...]) -> LearnerID:
         """
