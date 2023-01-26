@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod
 
 from modrover.learner import Learner, LearnerID
 
@@ -16,7 +16,8 @@ class RoverStrategy(ABC):
     def __init__(self, num_covs: int) -> None:
         self.num_covs = num_covs
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def base_learner_id(self) -> LearnerID:
         """Starting learner id of the strategy"""
 
