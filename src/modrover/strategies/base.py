@@ -23,7 +23,7 @@ class RoverStrategy(ABC):
     def generate_next_layer(
             self,
             current_learner_ids: set[LearnerID],
-            prior_learners: dict[LearnerID, Learner]) -> Iterable:
+            learners: dict[LearnerID, Learner]) -> Iterable:
         """Abstract method to generate the next set of learner IDs."""
         raise NotImplementedError
 
@@ -94,7 +94,7 @@ class RoverStrategy(ABC):
     def _filter_learner_ids(
             self,
             current_learner_ids: set[LearnerID],
-            prior_learners: dict[LearnerID, Learner],
+            learners: dict[LearnerID, Learner],
             threshold: float = 1.0,
             num_best: int = 1) -> set[LearnerID]:
         """Filter out low-performing covariate ids from selection.
@@ -105,7 +105,7 @@ class RoverStrategy(ABC):
         Return the remainder
         """
         sorted_learner_ids = sorted(current_learner_ids,
-                                    key=lambda x: prior_learners[x].performance)
+                                    key=lambda x: learners[x].performance)
         # Select the n best
         best_learner_ids = set(sorted_learner_ids[-num_best:])
 
@@ -115,10 +115,10 @@ class RoverStrategy(ABC):
             # If any upstream has a performance exceeding the current, don't explore the
             # downstream ids.
             upstreams = self.get_upstream_learner_ids(learner_id)
-            current_performance = prior_learners[learner_id].performance
+            current_performance = learners[learner_id].performance
             for upstream_learner_id in upstreams:
-                if upstream_learner_id in prior_learners:
-                    previous_performance = prior_learners[upstream_learner_id].performance
+                if upstream_learner_id in learners:
+                    previous_performance = learners[upstream_learner_id].performance
                     if current_performance / previous_performance < threshold:
                         # Remove the current id from consideration
                         learner_ids_to_remove.add(learner_id)

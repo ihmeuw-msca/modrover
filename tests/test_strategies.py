@@ -33,7 +33,7 @@ def test_basic_filtering():
     base_strategy = DummyStrategy(num_covs=num_covs)
     first_layer = [(0, i,) for i in range(1, num_covs + 1)]
 
-    # Test 1: select the n best prior_learners
+    # Test 1: select the n best learners
     base_perf = 0
     delta = .2
     performances = {}
@@ -43,13 +43,13 @@ def test_basic_filtering():
 
     best = base_strategy._filter_learner_ids(
         current_learner_ids=set(first_layer),
-        prior_learners=performances,
+        learners=performances,
     )
     assert best == {first_layer[-1]}
 
     best_two = base_strategy._filter_learner_ids(
         current_learner_ids=set(first_layer),
-        prior_learners=performances,
+        learners=performances,
         num_best=2
     )
     assert best_two == set(first_layer[-2:])
@@ -80,7 +80,7 @@ def test_parent_ratio():
 
     new_lids = strategy._filter_learner_ids(
         current_learner_ids={lid_1, lid_2},
-        prior_learners=performances,
+        learners=performances,
         num_best=2,
         threshold=1
     )
@@ -100,7 +100,7 @@ def test_generate_forward_layer():
 
     next_layer = strategy.generate_next_layer(
         current_learner_ids={lid_1, lid_2},
-        prior_learners=performances,
+        learners=performances,
         num_best=2,
     )
 
@@ -133,7 +133,7 @@ def test_generate_backward_layer():
 
     next_layer = strategy.generate_next_layer(
         current_learner_ids={lid_1, lid_2},
-        prior_learners=performances,
+        learners=performances,
         num_best=2,
     )
 

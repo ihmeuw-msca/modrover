@@ -105,7 +105,7 @@ class Rover:
             self._fit_layer(dataset, current_learners)
             next_ids = strategy.generate_next_layer(
                 current_learner_ids=current_ids,
-                prior_learners=self.learners
+                learners=self.learners
             )
             current_ids = set(next_ids)
         return
