@@ -23,13 +23,13 @@ class FullExplore(RoverStrategy):
 
         all_cov_ids = range(1, self.num_covs + 1)
 
-        remaining_learner_ids = set()
+        remaining_learner_ids = []
         for num_elements in range(1, self.num_covs + 1):
-            remaining_learner_ids |= set(map(
+            remaining_learner_ids.extend(map(
                 self._as_learner_id, combinations(all_cov_ids, num_elements)
             ))
         self.called = True
-        return remaining_learner_ids
+        return set(remaining_learner_ids)
 
     def get_upstream_learner_ids(self, learner_id: LearnerID):
         """This method is irrelevant for full explore.
