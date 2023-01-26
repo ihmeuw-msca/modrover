@@ -23,7 +23,7 @@ class DummyStrategy(RoverStrategy):
     def base_learner_id(self) -> LearnerID:
         return (0,)
 
-    def generate_next_layer(self, *args, **kwargs):
+    def get_next_layer(self, *args, **kwargs):
         pass
 
     def get_upstream_learner_ids(self, *args, **kwargs):
@@ -46,13 +46,13 @@ def test_basic_filtering():
         base_perf += delta
 
     best = base_strategy._filter_learner_ids(
-        current_learner_ids=set(first_layer),
+        current_layer=set(first_layer),
         learners=performances,
     )
     assert best == {first_layer[-1]}
 
     best_two = base_strategy._filter_learner_ids(
-        current_learner_ids=set(first_layer),
+        current_layer=set(first_layer),
         learners=performances,
         num_best=2
     )
@@ -83,7 +83,7 @@ def test_parent_ratio():
     # LID 2 has better performance than all parents, so we should be exploring further
 
     new_lids = strategy._filter_learner_ids(
-        current_learner_ids={lid_1, lid_2},
+        current_layer={lid_1, lid_2},
         learners=performances,
         num_best=2,
         threshold=1
@@ -102,8 +102,8 @@ def test_generate_forward_layer():
         lid_2: DummyModel()
     }
 
-    next_layer = strategy.generate_next_layer(
-        current_learner_ids={lid_1, lid_2},
+    next_layer = strategy.get_next_layer(
+        current_layer={lid_1, lid_2},
         learners=performances,
         num_best=2,
     )
@@ -118,7 +118,7 @@ def test_generate_forward_layer():
     # Check terminal condition
     terminal_lid = (0, 1, 2, 3)
     performances[terminal_lid] = DummyModel()
-    final_layer = strategy.generate_next_layer(
+    final_layer = strategy.get_next_layer(
         {terminal_lid},
         performances
     )
@@ -135,8 +135,8 @@ def test_generate_backward_layer():
         lid_2: DummyModel()
     }
 
-    next_layer = strategy.generate_next_layer(
-        current_learner_ids={lid_1, lid_2},
+    next_layer = strategy.get_next_layer(
+        current_layer={lid_1, lid_2},
         learners=performances,
         num_best=2,
     )
@@ -149,7 +149,7 @@ def test_generate_backward_layer():
     # Check terminal condition
     terminal_lid = expected_layer.pop()
     performances[terminal_lid] = DummyModel()
-    final_layer = strategy.generate_next_layer(
+    final_layer = strategy.get_next_layer(
         {terminal_lid},
         performances
     )
@@ -159,7 +159,7 @@ def test_generate_backward_layer():
 def test_full_explore():
     full_strategy = FullExplore(3)
 
-    second_layer = full_strategy.generate_next_layer(
+    second_layer = full_strategy.get_next_layer(
         full_strategy.first_layer,
         dict()
     )
@@ -176,7 +176,7 @@ def test_full_explore():
     assert second_layer == expected_learner_ids
 
     # Check that a second call results in an empty generator
-    empty_layer = full_strategy.generate_next_layer(
+    empty_layer = full_strategy.get_next_layer(
         second_layer,
         dict()
     )

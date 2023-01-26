@@ -24,9 +24,9 @@ class FullExplore(RoverStrategy):
             ))
         return set(second_layer)
 
-    def generate_next_layer(
+    def get_next_layer(
         self,
-        current_learner_ids: set[LearnerID],
+        current_layer: set[LearnerID],
         learners: dict[LearnerID, Learner]
     ) -> set[LearnerID]:
         """Find every single possible learner ID combination, return in a single layer."""
@@ -35,13 +35,13 @@ class FullExplore(RoverStrategy):
         # Reasoning: Fullexplore only has a single layer, so this has to be set to avoid
         # infinite looping.
 
-        if current_learner_ids == self.first_layer:
+        if current_layer == self.first_layer:
             return self.second_layer
-        elif current_learner_ids == self.second_layer:
+        elif current_layer == self.second_layer:
             return set()
         else:
             raise ValueError(
-                "current_learner_ids can only be the set of base_learner_id or "
+                "current_layer can only be the set of base_learner_id or "
                 "the entire rest of the learner ids."
             )
 

@@ -8,9 +8,9 @@ class ForwardExplore(RoverStrategy):
     def base_learner_id(self) -> LearnerID:
         return (0,)
 
-    def generate_next_layer(
+    def get_next_layer(
         self,
-        current_learner_ids: set[LearnerID],
+        current_layer: set[LearnerID],
         learners: dict[LearnerID, Learner],
         threshold: float = 1.0,
         num_best: int = 1,
@@ -22,7 +22,7 @@ class ForwardExplore(RoverStrategy):
 
         The children will be (0,1,2), (0,1,3), (0,1,4), (0,1,5)
 
-        :param current_learner_ids: the current layer of learner IDs
+        :param current_layer: the current layer of learner IDs
         :param learners: dictionary storing prior scored models
         :param threshold: learners must out-perform parents by this ratio to continue exploring
         :param num_best: the number of best learner IDs in this layer to propagate
@@ -30,7 +30,7 @@ class ForwardExplore(RoverStrategy):
         """
         next_learner_ids = set()
         remaining_cov_ids = self._filter_learner_ids(
-            current_learner_ids=current_learner_ids,
+            current_layer=current_layer,
             learners=learners,
             threshold=threshold,
             num_best=num_best

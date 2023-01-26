@@ -8,9 +8,9 @@ class BackwardExplore(RoverStrategy):
     def base_learner_id(self) -> LearnerID:
         return tuple(range(self.num_covs + 1))
 
-    def generate_next_layer(
+    def get_next_layer(
         self,
-        current_learner_ids: set[LearnerID],
+        current_layer: set[LearnerID],
         learners: dict[LearnerID, Learner],
         threshold: float = 1.0,
         num_best: int = 1,
@@ -22,7 +22,7 @@ class BackwardExplore(RoverStrategy):
 
         The downstreams will be (0,1), (0,2)
 
-        :param current_learner_ids:
+        :param current_layer:
         :param learners: dictionary storing prior scored models
         :param threshold: learners must out-perform parents by this ratio to continue exploring
         :param num_best: the number of best learner IDs in this layer to propagate
@@ -30,7 +30,7 @@ class BackwardExplore(RoverStrategy):
         """
         next_learner_ids = set()
         remaining_cov_ids = self._filter_learner_ids(
-            current_learner_ids=current_learner_ids,
+            current_layer=current_layer,
             learners=learners,
             threshold=threshold,
             num_best=num_best

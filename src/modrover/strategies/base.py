@@ -21,9 +21,9 @@ class RoverStrategy(ABC):
         """Starting learner id of the strategy"""
 
     @abstractmethod
-    def generate_next_layer(
+    def get_next_layer(
         self,
-        current_learner_ids: set[LearnerID],
+        current_layer: set[LearnerID],
         learners: dict[LearnerID, Learner]
     ) -> set[LearnerID]:
         """Abstract method to generate the next set of learner IDs."""
@@ -93,7 +93,7 @@ class RoverStrategy(ABC):
 
     def _filter_learner_ids(
             self,
-            current_learner_ids: set[LearnerID],
+            current_layer: set[LearnerID],
             learners: dict[LearnerID, Learner],
             threshold: float = 1.0,
             num_best: int = 1) -> set[LearnerID]:
@@ -104,7 +104,7 @@ class RoverStrategy(ABC):
         Drop if this candidate model performed worse than any of its parent
         Return the remainder
         """
-        sorted_learner_ids = sorted(current_learner_ids,
+        sorted_learner_ids = sorted(current_layer,
                                     key=lambda x: learners[x].performance)
         # Select the n best
         best_learner_ids = set(sorted_learner_ids[-num_best:])
