@@ -28,17 +28,16 @@ class ForwardExplore(RoverStrategy):
         :param max_len: the number of best learner IDs in this layer to propagate
         :return:
         """
-        next_learner_ids = set()
-        remaining_cov_ids = self._filter_curr_layer(
+        learner_ids = self._filter_curr_layer(
             curr_layer=curr_layer,
             learners=learners,
             min_improvement=min_improvement,
             max_len=max_len
         )
-        for learner_id in remaining_cov_ids:
-            candidate_ids = self._get_learner_id_children(learner_id)
-            next_learner_ids |= set(candidate_ids)
-        return next_learner_ids
+        next_layer = set()
+        for learner_id in learner_ids:
+            next_layer |= self._get_learner_id_children(learner_id)
+        return next_layer
 
     def get_upstream_learner_ids(
         self,
