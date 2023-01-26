@@ -16,13 +16,14 @@ class DummyModel(Learner):
 
 class DummyStrategy(RoverStrategy):
 
-    def __init__(self, num_covariates: int):
-        self.num_covariates = num_covariates
+    @property
+    def base_learner_id(self) -> LearnerID:
+        return (0,)
 
-    def generate_next_layer(self, *args, **kwargs):
+    def get_next_layer(self, *args, **kwargs):
         pass
 
-    def get_upstream_learner_ids(self, *args, **kwargs):
+    def _get_upstream_learner_ids(self, *args, **kwargs):
         return set()
 
 
@@ -30,10 +31,10 @@ def test_basic_filtering():
     """Test that we can select the best learner IDs based on past performance."""
     num_covs = 5
 
-    base_strategy = DummyStrategy(num_covariates=num_covs)
+    base_strategy = DummyStrategy(num_covs=num_covs)
     first_layer = [(0, i,) for i in range(1, num_covs + 1)]
 
-    # Test 1: select the n best prior_learners
+    # Test 1: select the n best learners
     base_perf = 0
     delta = .2
     performances = {}
@@ -41,48 +42,49 @@ def test_basic_filtering():
         performances[lid] = DummyModel(base_perf)
         base_perf += delta
 
-    best = base_strategy._filter_learner_ids(
-        current_learner_ids=set(first_layer),
-        prior_learners=performances,
+    best = base_strategy._filter_curr_layer(
+        curr_layer=set(first_layer),
+        learners=performances,
     )
     assert best == {first_layer[-1]}
 
-    best_two = base_strategy._filter_learner_ids(
-        current_learner_ids=set(first_layer),
-        prior_learners=performances,
-        num_best=2
+    best_two = base_strategy._filter_curr_layer(
+        curr_layer=set(first_layer),
+        learners=performances,
+        max_len=2
     )
     assert best_two == set(first_layer[-2:])
 
 
 def test_parent_ratio():
     """Test that we can drop learner ids with better performing upstreams."""
-    strategy = BackwardExplore(4)
+    strategy = BackwardExplore(2)
 
     # Initialize a set of model ids and their children
     lid_1 = (0, 1)
     lid_2 = (0, 2)
 
     # Mock up some performances
-    performances = {
+    learners = {
+        (0, 1, 2): DummyModel(7),
         lid_1: DummyModel(5),
         lid_2: DummyModel(10)
     }
 
-    upstreams = strategy.get_upstream_learner_ids(lid_1).union(
-        strategy.get_upstream_learner_ids(lid_2)
+    upstreams = strategy._get_upstream_learner_ids(lid_1, learners).union(
+        strategy._get_upstream_learner_ids(lid_2, learners)
     )
     for lid in upstreams:
-        performances[lid] = DummyModel(7)
+        learners[lid] = DummyModel(7)
 
     # LID 1 should have worse performance than its upstreams, so should not be explored further
     # LID 2 has better performance than all parents, so we should be exploring further
 
-    new_lids = strategy._filter_learner_ids(
-        current_learner_ids={lid_1, lid_2},
-        prior_learners=performances,
-        num_best=2,
-        threshold=1
+    new_lids = strategy._filter_curr_layer(
+        curr_layer={lid_1, lid_2},
+        learners=learners,
+        max_len=2,
+        min_improvement=1
     )
     assert new_lids == {lid_2}
 
@@ -98,10 +100,10 @@ def test_generate_forward_layer():
         lid_2: DummyModel()
     }
 
-    next_layer = strategy.generate_next_layer(
-        current_learner_ids={lid_1, lid_2},
-        prior_learners=performances,
-        num_best=2,
+    next_layer = strategy.get_next_layer(
+        curr_layer={lid_1, lid_2},
+        learners=performances,
+        max_len=2,
     )
 
     expected_layer = {
@@ -114,7 +116,7 @@ def test_generate_forward_layer():
     # Check terminal condition
     terminal_lid = (0, 1, 2, 3)
     performances[terminal_lid] = DummyModel()
-    final_layer = strategy.generate_next_layer(
+    final_layer = strategy.get_next_layer(
         {terminal_lid},
         performances
     )
@@ -131,10 +133,10 @@ def test_generate_backward_layer():
         lid_2: DummyModel()
     }
 
-    next_layer = strategy.generate_next_layer(
-        current_learner_ids={lid_1, lid_2},
-        prior_learners=performances,
-        num_best=2,
+    next_layer = strategy.get_next_layer(
+        curr_layer={lid_1, lid_2},
+        learners=performances,
+        max_len=2,
     )
 
     expected_layer = {
@@ -145,7 +147,7 @@ def test_generate_backward_layer():
     # Check terminal condition
     terminal_lid = expected_layer.pop()
     performances[terminal_lid] = DummyModel()
-    final_layer = strategy.generate_next_layer(
+    final_layer = strategy.get_next_layer(
         {terminal_lid},
         performances
     )
@@ -155,7 +157,10 @@ def test_generate_backward_layer():
 def test_full_explore():
     full_strategy = FullExplore(3)
 
-    all_ids = set(full_strategy.generate_next_layer())
+    second_layer = full_strategy.get_next_layer(
+        full_strategy.first_layer,
+        dict()
+    )
     expected_combos = {
         (0, 1),
         (0, 2),
@@ -166,11 +171,14 @@ def test_full_explore():
         (0, 1, 2, 3),
     }
     expected_learner_ids = set(map(LearnerID, expected_combos))
-    assert all_ids == expected_learner_ids
+    assert second_layer == expected_learner_ids
 
     # Check that a second call results in an empty generator
-    second_layer = set(full_strategy.generate_next_layer())
-    assert not second_layer
+    empty_layer = full_strategy.get_next_layer(
+        second_layer,
+        dict()
+    )
+    assert not empty_layer
 
 
 @pytest.mark.parametrize(
