@@ -11,6 +11,7 @@ from regmod.models import Model as RegmodModel
 from regmod.variable import Variable
 
 from .globals import get_rmse, model_type_dict
+from .exceptions import InvalidConfigurationError
 
 LearnerID = tuple[int, ...]
 
@@ -83,8 +84,10 @@ class Learner:
     @property
     def model_class(self):
         if self.model_type not in model_type_dict:
-            raise KeyError(f"Model type {self.model_type} not known, "
-                           f"please select from {list(model_type_dict.keys())}")
+            raise InvalidConfigurationError(
+                f"Model type {self.model_type} not known, "
+                f"please select from {list(model_type_dict.keys())}"
+            )
         return model_type_dict[self.model_type]
 
     @property

@@ -122,7 +122,7 @@ class Rover:
             be considered in ensembling
         :return: None
         """
-        self.explore(
+        self._explore(
             dataset=dataset,
             strategy=strategy
         )
@@ -133,7 +133,7 @@ class Rover:
         )
         self.super_learner = super_learner
 
-    def explore(self, dataset: pd.DataFrame, strategy: Union[str, RoverStrategy]):
+    def _explore(self, dataset: pd.DataFrame, strategy: Union[str, RoverStrategy]):
         """Explore the entire tree of learners.
 
         Params:
@@ -196,7 +196,6 @@ class Rover:
                 "The ratio cutoff parameter must be < 1, and max_num_models >= 1, "
                 "otherwise no models will be used for ensembling."
             )
-
 
         learner_ids, coefficients = self._generate_coefficients_matrix()
 
