@@ -18,6 +18,7 @@ class Rover:
         model_type: str,
         y: str,
         col_fixed: dict[str, list[str]],
+        # TODO: if we only ever explore over 1 param, should just be a list
         col_explore: dict[str, list[str]],
         param_specs: Optional[dict[str, dict]] = None,
         offset: str = "offset",
@@ -88,7 +89,6 @@ class Rover:
                 self.param_specs.get(param_name, {})
             )
         return Learner(
-            learner_id,
             self.model_type,
             self.y,
             param_specs,
@@ -156,7 +156,7 @@ class Rover:
                 learner = self.get_learner(learner_id)
 
                 if not learner.has_been_fit:
-                    curr_learners.append(learner)
+                    curr_learners.append((learner_id, learner))
 
             self._fit_layer(dataset, curr_learners)
             next_ids = strategy.get_next_layer(
@@ -166,11 +166,15 @@ class Rover:
             curr_ids = set(next_ids)
         return
 
-    def _fit_layer(self, dataset: pd.DataFrame, learners: list[Learner]) -> None:
+    def _fit_layer(
+            self,
+            dataset: pd.DataFrame,
+            learners: list[tuple[tuple[int, ...], Learner]]
+    ) -> None:
         """Fit a layer of models. Store results on the learners dict."""
-        for learner in learners:
+        for learner_id, learner in learners:
             learner.fit(dataset, self.holdout_cols)
-            self.learners[learner.learner_id] = learner
+            self.learners[learner_id] = learner
 
     def _generate_ensemble_coefficients(
         self,

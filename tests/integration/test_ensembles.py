@@ -82,10 +82,11 @@ def test_generate_coefficient_means(mock_rover):
 def test_superlearner_creation(mock_rover):
     """Test that we can create a super learner object from rover after fitting."""
     mock_rover.get_learner = lambda learner_id, use_cache: \
-        Learner(learner_id=tuple(range(5)),
-                model_type='gaussian',
-                y='y',
-                param_specs={'mu': {'variables': list(range(5))}})
+        Learner(
+            model_type='gaussian',
+            y='y',
+            param_specs={'mu': {'variables': list(range(5))}}
+        )
 
     super_learner = mock_rover._create_super_learner(
         max_num_models=10,

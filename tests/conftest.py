@@ -8,8 +8,7 @@ import pytest
 class MockLearner(Learner):
     """Mock learner that comes 'prefit' with coefficients."""
 
-    def __init__(self, learner_id: tuple, coefficients: np.ndarray, performance: float):
-        self.learner_id = learner_id
+    def __init__(self, coefficients: np.ndarray, performance: float):
         self.performance = performance
         self._model = lambda: None  # arbitrary mutable object that we can assign weights to
 
@@ -35,7 +34,7 @@ def mock_rover():
     ]
 
     learners = {
-        learner_id: MockLearner(learner_id, *params)
+        learner_id: MockLearner(*params)
         for learner_id, *params in learner_parameters
     }
 
