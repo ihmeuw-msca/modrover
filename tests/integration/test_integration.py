@@ -21,7 +21,8 @@ def test_rover():
         model_type='gaussian',
         y='y',
         col_fixed={'mu': ['intercept']},
-        col_explore={'mu': ['var_a', 'var_b']},
+        col_explore=['var_a', 'var_b'],
+        explore_param='mu',
         holdout_cols=['holdout']
     )
 

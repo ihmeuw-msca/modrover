@@ -23,6 +23,7 @@ class Learner:
         model_type: str,
         y: str,
         param_specs: dict[str, dict],
+        all_covariates: list[str],
         offset: str = "offset",
         weights: str = "weights",
         model_eval_metric: Callable = get_rmse,
@@ -47,16 +48,11 @@ class Learner:
         self.offset = offset
         self.weights = weights
         self.model_eval_metric = model_eval_metric
+        self.all_covariates = all_covariates
 
         # Initialize null model
         self._model: Optional[RegmodModel] = None
         self.performance: Optional[float] = None
-
-        # extract all covariates
-        all_covariates = set()
-        for param_spec in param_specs.values():
-            all_covariates |= set(param_spec["variables"])
-        self.all_covariates = list(all_covariates)
 
         # convert str to Variable
         # TODO: this won't be necessary in regmod v1.0.0

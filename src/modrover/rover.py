@@ -1,3 +1,4 @@
+from collections import defaultdict
 from typing import Callable, Optional, Union
 
 import numpy as np
@@ -18,14 +19,32 @@ class Rover:
         model_type: str,
         y: str,
         col_fixed: dict[str, list[str]],
-        # TODO: if we only ever explore over 1 param, should just be a list
-        col_explore: dict[str, list[str]],
+        col_explore: list[str],
+        explore_param: str,
         param_specs: Optional[dict[str, dict]] = None,
         offset: str = "offset",
         weights: str = "weights",
         holdout_cols: Optional[list[str]] = None,
         model_eval_metric: Callable = get_rmse,
     ) -> None:
+        """
+        Initialization of the Rover class.
+
+        :param model_type: str, the class of regmod model to fit
+        :param y: str, the name of the column representing observations
+        :param col_fixed: a dict with string keys representing parameters, and values of
+            string lists representing columns mapped to the given parameter. Fixed cols
+            are not explored over and are present in every learner
+        :param col_explore: a list representing the covariate columns rover will explore over
+        :param explore_param: str, the parameter we are exploring over
+        :param param_specs: TODO - add descriptions for param specs, offset, weights
+        :param offset:
+        :param weights:
+        :param holdout_cols: a list of column names containing 1's and 0's that represent
+            folds in the rover cross-validation algorithm
+        :param model_eval_metric: a callable used to evaluate cross-validated performance of
+            sublearners in rover.
+        """
         # parse param_specs
         if param_specs is None:
             param_specs = {}
@@ -34,6 +53,7 @@ class Rover:
         self.y = y
         self.col_fixed = col_fixed
         self.col_explore = col_explore
+        self.explore_param = explore_param
         self.param_specs = param_specs
         self.offset = offset
         self.weights = weights
@@ -48,21 +68,46 @@ class Rover:
         # ...
 
     @property
-    def performances(self):
+    def performances(self) -> dict[tuple[int, ...], Learner]:
         """Convenience property to select only the performance of each learner."""
         return {lid: learner.performance for lid, learner in self.learners.items()}
 
     @property
-    def num_covariates(self):
-        # TODO: Validate this method, check for overlaps and such
-        num_covariates = 0
-        for key, val in self.col_fixed.items():
-            num_covariates += len(val)
+    def num_covariates(self) -> int:
+        return len(self.all_covariates)
 
-        for key, val in self.col_explore.items():
-            num_covariates += len(val)
+    @property
+    def all_covariates(self) -> list[str]:
+        """Lazily unpack the provided fixed and explore covariates.
 
-        return num_covariates
+        Create an ordered list of all covariates represented in the dataset.
+
+        Assumption: No duplicates within or without parameter groups
+        """
+        if not hasattr(self, "_all_covariates"):
+            all_covariates = []
+            for fixed_cols in self.col_fixed.values():
+                all_covariates.extend(fixed_cols)
+
+            all_covariates.extend(self.col_explore)
+            self._all_covariates = all_covariates
+
+        return self._all_covariates
+
+    @property
+    def default_param_specs(self) -> dict:
+        """All fixed columns should be represented in every learner, so we can create
+        a default mapping of columns that can be simply parameterized in get_learner
+        with the variable explore columns."""
+        param_specs = defaultdict(lambda: defaultdict(list))
+
+        for param_name, fixed_columns in self.col_fixed.items():
+            param_specs[param_name]["variables"].extend(fixed_columns)
+            param_specs[param_name].update(
+                self.param_specs.get(param_name, {})
+            )
+        return param_specs
+
 
     def check_is_fitted(self):
         if not self.super_learner:
@@ -74,24 +119,20 @@ class Rover:
         if learner_id in self.learners and use_cache:
             return self.learners[learner_id]
 
-        all_covariates = list(self.col_explore.values())[0]
-        param_specs = {}
-        for param_name, covs in self.col_fixed.items():
-            variables = covs.copy()
-            if param_name in self.col_explore:
-                variables.extend([
-                    # Ignore the always-present 0 index. Results in duplicate column names.
-                    all_covariates[i - 1] for i in learner_id[1:]
-                ])
-            param_specs[param_name] = {}
-            param_specs[param_name]["variables"] = variables
-            param_specs[param_name].update(
-                self.param_specs.get(param_name, {})
-            )
+        explore_columns = [self.col_explore[i] for i in learner_id]
+        param_specs = self.default_param_specs.copy()
+
+        # Important note: The order is important here since it determines the
+        # coefficient value mapping later.
+        # Explore columns are added at the end, so that there is a consistent offset
+        param_specs[self.explore_param]['variables'] = \
+            param_specs[self.explore_param]['variables'] + explore_columns
+
         return Learner(
             self.model_type,
             self.y,
             param_specs,
+            all_covariates=self.all_covariates,
             offset=self.offset,
             weights=self.weights,
             model_eval_metric=self.model_eval_metric,
@@ -145,7 +186,7 @@ class Rover:
             # If a string is provided, select a strategy for the user.
             strategy_class = get_strategy(strategy)
             strategy = strategy_class(
-                num_covs=len(list(self.col_explore.values())[0]),
+                num_covs=self.num_covariates,
             )
 
         curr_ids = {strategy.base_learner_id}

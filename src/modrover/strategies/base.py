@@ -59,13 +59,6 @@ class RoverStrategy(ABC):
         cov_ids = list(map(int, cov_ids))
         cov_ids.sort()
 
-        if not all(map(lambda x: 0 <= x, cov_ids)):
-            raise ValueError("Cannot have negative covariate IDs")
-
-        if 0 not in cov_ids:
-            # Intercept always a fixed covariate, present in all models
-            cov_ids.insert(0, 0)
-
         return tuple(cov_ids)
 
     def _get_learner_id_children(self, learner_id: LearnerID) -> set[LearnerID]:
