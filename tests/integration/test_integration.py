@@ -27,5 +27,5 @@ def test_rover():
     )
 
     rover.fit(dataset=dataframe, strategy='full', ratio_cutoff=.0)
-    assert set(rover.learners.keys()) == {(0,), (0, 1), (0, 2), (0, 1, 2)}
+    assert set(rover.learners.keys()) == {tuple(), (0,), (1,), (0, 1)}
     assert isinstance(rover.super_learner, Learner)

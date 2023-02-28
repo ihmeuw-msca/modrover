@@ -108,7 +108,6 @@ class Rover:
             )
         return param_specs
 
-
     def check_is_fitted(self):
         if not self.super_learner:
             raise NotFittedError("Rover has not been ensembled yet")
@@ -119,14 +118,14 @@ class Rover:
         if learner_id in self.learners and use_cache:
             return self.learners[learner_id]
 
-        explore_columns = [self.col_explore[i] for i in learner_id]
         param_specs = self.default_param_specs.copy()
-
-        # Important note: The order is important here since it determines the
-        # coefficient value mapping later.
-        # Explore columns are added at the end, so that there is a consistent offset
-        param_specs[self.explore_param]['variables'] = \
-            param_specs[self.explore_param]['variables'] + explore_columns
+        if any(learner_id):
+            # Important note: The order is matters here since it determines the
+            # coefficient value mapping later.
+            # Explore columns are added at the end, so that there is a consistent offset
+            explore_columns = [self.col_explore[i] for i in learner_id]
+            param_specs[self.explore_param]['variables'] = \
+                param_specs[self.explore_param]['variables'] + explore_columns
 
         return Learner(
             self.model_type,
@@ -186,7 +185,7 @@ class Rover:
             # If a string is provided, select a strategy for the user.
             strategy_class = get_strategy(strategy)
             strategy = strategy_class(
-                num_covs=self.num_covariates,
+                num_covs=len(self.col_explore),
             )
 
         curr_ids = {strategy.base_learner_id}
@@ -314,8 +313,9 @@ class Rover:
         offset = self.num_covariates - len(self.col_explore)
         row = np.zeros(self.num_covariates)
         row[:offset] = opt_coefs[:offset]
-        explore_indices = np.array(learner_id) + offset
-        row[explore_indices] = opt_coefs[offset:]
+        if any(learner_id):
+            explore_indices = np.array(learner_id) + offset
+            row[explore_indices] = opt_coefs[offset:]
         return row
 
     def _create_super_learner(
@@ -330,7 +330,7 @@ class Rover:
             kernel_param=kernel_param,
             ratio_cutoff=ratio_cutoff
         )
-        master_learner_id = tuple(range(self.num_covariates))
+        master_learner_id = tuple(range(len(self.col_explore)))
         learner = self.get_learner(
             learner_id=master_learner_id,
             use_cache=False
