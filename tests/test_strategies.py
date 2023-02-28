@@ -32,7 +32,7 @@ def test_basic_filtering():
     num_covs = 5
 
     base_strategy = DummyStrategy(num_covs=num_covs)
-    first_layer = [(0, i,) for i in range(1, num_covs + 1)]
+    first_layer = [(i,) for i in range(num_covs)]
 
     # Test 1: select the n best learners
     base_perf = 0
@@ -58,7 +58,7 @@ def test_basic_filtering():
 
 def test_parent_ratio():
     """Test that we can drop learner ids with better performing upstreams."""
-    strategy = BackwardExplore(2)
+    strategy = BackwardExplore(3)
 
     # Initialize a set of model ids and their children
     lid_1 = (0, 1)
@@ -83,7 +83,7 @@ def test_parent_ratio():
     new_lids = strategy._filter_curr_layer(
         curr_layer={lid_1, lid_2},
         learners=learners,
-        max_len=2,
+        max_len=3,
         min_improvement=1
     )
     assert new_lids == {lid_2}
@@ -91,7 +91,7 @@ def test_parent_ratio():
 
 def test_generate_forward_layer():
 
-    strategy = ForwardExplore(3)
+    strategy = ForwardExplore(4)
     lid_1 = (0, 1)
     lid_2 = (0, 2)
 
@@ -109,7 +109,7 @@ def test_generate_forward_layer():
     expected_layer = {
         (0, 1, 2),
         (0, 2, 3),
-        (0, 1, 3)
+        (0, 1, 3),
     }
     assert next_layer == expected_layer
 
@@ -124,7 +124,7 @@ def test_generate_forward_layer():
 
 
 def test_generate_backward_layer():
-    strategy = BackwardExplore(3)
+    strategy = BackwardExplore(4)
     lid_1 = (0, 1)
     lid_2 = (0, 2)
 
@@ -140,12 +140,14 @@ def test_generate_backward_layer():
     )
 
     expected_layer = {
-        (0,)
+        (0,),
+        (1,),
+        (2,)
     }
     assert next_layer == expected_layer
 
     # Check terminal condition
-    terminal_lid = expected_layer.pop()
+    terminal_lid = tuple()
     performances[terminal_lid] = DummyModel()
     final_layer = strategy.get_next_layer(
         {terminal_lid},
@@ -162,13 +164,13 @@ def test_full_explore():
         dict()
     )
     expected_combos = {
+        (0,),
+        (1,),
+        (2,),
         (0, 1),
         (0, 2),
-        (0, 3),
+        (1, 2),
         (0, 1, 2),
-        (0, 1, 3),
-        (0, 2, 3),
-        (0, 1, 2, 3),
     }
     expected_learner_ids = set(map(LearnerID, expected_combos))
     assert second_layer == expected_learner_ids
@@ -186,10 +188,8 @@ def test_full_explore():
     [
         # Duplicated ints
         ((0, 1, 2, 3, 3, 3), (0, 1, 2, 3), does_not_raise()),
-        # Include fixed if not present
-        ((1, 2, 3), (0, 1, 2, 3), does_not_raise()),
         # Non ints
-        (('1', '2', '3'), (0, 1, 2, 3), does_not_raise()),
+        (('1', '2', '3'), (1, 2, 3), does_not_raise()),
         # Negatives should fail
         ((-1, 1, 3), None, pytest.raises(ValueError))
     ]
@@ -202,13 +202,6 @@ def test_as_learner_id(input_cov_id, validated_cov_id, expectation):
             assert learner_id == validated_cov_id
 
 
-def test_learnerid_initialization():
-    strategy = FullExplore(3)
-    # Check that the correct cov_ids are set
-    learner_id = strategy._as_learner_id((1, 2, 3))
-    assert learner_id == (0, 1, 2, 3)
-
-
 def test_get_learner_id_children():
     strategy = FullExplore(5)
     # Check children generation
@@ -216,12 +209,12 @@ def test_get_learner_id_children():
     children = strategy._get_learner_id_children(learner_id)
     assert len(children) == 2
 
-    expected_children = {(0, 1, 2, 3, 4), (0, 1, 2, 3, 5)}
+    expected_children = {(0, 1, 2, 3), (1, 2, 3, 4)}
     assert expected_children == children
 
     # Check no more children generated when all covariates are represented
     strategy = FullExplore(3)
-    learner_id = strategy._as_learner_id((0, 1, 2, 3))
+    learner_id = strategy._as_learner_id((0, 1, 2))
     assert not any(strategy._get_learner_id_children(learner_id))
 
 
@@ -231,7 +224,7 @@ def test_learnerid_parents():
     learner_id = strategy._as_learner_id((1, 2, 3))
     parents = strategy._get_learner_id_parents(learner_id)
 
-    expected_parents = {(0, 2, 3), (0, 1, 3), (0, 1, 2)}
+    expected_parents = {(1, 2), (2, 3), (1, 3)}
     assert len(parents) == 3
     assert expected_parents == parents
 
