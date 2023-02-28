@@ -278,13 +278,45 @@ class Rover:
 
         # Aggregate the coefficients
         x_dim, y_dim = len(learner_ids), self.num_covariates
-        coefficients = np.zeros((x_dim, y_dim))
+        coefficients = np.empty((x_dim, y_dim))
+
+        # Note: 3 methods were profiled for stacking these rows together
+        #   a) initialize an empty array and assign rows iteratively
+        #   b) use np.vstack to concatenate rows iteratively
+        #   c) use np.concatenate to concatenate all rows together
+
+        # Of the 3, initializing the array first seems to be most performant
 
         for row, learner_id in enumerate(learner_ids):
             opt_coefs = self.learners[learner_id].opt_coefs
-            coefficients[row][list(learner_id)] = opt_coefs
+            all_coefs = self._learner_coefs_to_global_coefs(learner_id, opt_coefs)
+            coefficients[row] = all_coefs
 
         return learner_ids, coefficients
+
+    def _learner_coefs_to_global_coefs(
+        self, learner_id: tuple, opt_coefs: np.array
+    ) -> np.array:
+        """Given a set of coefficients from a specific learner, map those coefficients to
+        the complete set of covariates.
+
+        Ex. we have 5 covariates to explore over, a-e, and set a + b as fixed covariates
+        Take a sample learner the fixed covariates + d.
+
+        The resultant coefficients will be length 3, representing a, b, and d. c and e have
+        implicit coefficients of size 0 in the global model.
+
+        Taking some example coefficients from this sublearner of [.1, .2, .4],
+        this function will return [.1, .2, 0, .4, 0]
+        """
+        # Since explore cols are appended on after the fixed columns,
+        # we'll need to separate out the fixed and explore columns
+        offset = self.num_covariates - len(self.col_explore)
+        row = np.zeros(self.num_covariates)
+        row[:offset] = opt_coefs[:offset]
+        explore_indices = np.array(learner_id) + offset
+        row[explore_indices] = opt_coefs[offset:]
+        return row
 
     def _create_super_learner(
         self,

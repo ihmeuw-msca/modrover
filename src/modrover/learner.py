@@ -64,6 +64,7 @@ class Learner:
 
     @property
     def opt_coefs(self) -> Optional[np.ndarray]:
+        # TODO: If we have multiple parameters, what's the order of coefficients?
         if self._model:
             return self._model.opt_coefs
         return None

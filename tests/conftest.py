@@ -18,19 +18,20 @@ class MockLearner(Learner):
 class MockRover(Rover):
     """Mock Rover that comes 'prefit' with some mock data."""
 
-    def __init__(self, learners: dict, col_fixed: dict, col_explore: dict):
+    def __init__(self, learners: dict, col_fixed: dict, col_explore: list, explore_param: str):
         self.learners = learners
         self.col_fixed = col_fixed
         self.col_explore = col_explore
+        self.explore_param = explore_param
 
 
 @pytest.fixture
 def mock_rover():
 
     learner_parameters = [
-        ((0, 1, 3), np.array([.2, .4, .6]), 1.2),
-        ((0, 2, 3), np.array([0., .1, .5]), 1.),
-        ((0, 3), np.array([1., -.2]), -.3),
+        ((1, 3), np.array([.2, .4, .6]), 1.2),
+        ((2, 3), np.array([0., .1, .5]), 1.),
+        ((3, ), np.array([1., -.2]), -.3),
     ]
 
     learners = {
@@ -41,6 +42,7 @@ def mock_rover():
     rover = MockRover(
         learners=learners,
         col_fixed={'mu': [0]},
-        col_explore={'mu': [1, 2, 3, 4]}
+        col_explore=[1, 2, 3, 4],
+        explore_param='mu'
     )
     return rover
