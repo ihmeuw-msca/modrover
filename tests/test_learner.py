@@ -8,38 +8,40 @@ from modrover.learner import Learner, LearnerID
 @pytest.fixture
 def dataset():
     data = np.random.randn(25, 6)
-    columns = [
+    covariate_columns = [
         'var_a',
         'var_b',
         'var_c',
         'var_d',
         'var_e',
         'y']
-    dataframe = pd.DataFrame(data, columns=columns)
+    dataframe = pd.DataFrame(data, columns=covariate_columns)
     # Fill in intercept and holdout columns
     dataframe['intercept'] = 1
     dataframe['holdout_1'] = np.random.randint(0, 2, 25)
     dataframe['holdout_2'] = np.random.randint(0, 2, 25)
-    return dataframe
+    # Drop y covariate since it's the observed column
+    return covariate_columns[:-1], dataframe
 
 
 @pytest.fixture
-def model_specs():
+def model_specs(dataset):
+    all_covariates, _ = dataset
     specs = dict(
         model_type='gaussian',
         y='y',
         param_specs={
             'mu': {"variables": ['intercept', 'var_a', 'var_b', 'var_c']}
         },
+        all_covariates=all_covariates[:-2],
         offset='offset',
     )
     return specs
 
 
 def test_model_init(model_specs):
-    # Arbitrary: select first 2 covariates out of 5
-    learner_id = (0, 1, 2, 3)
-    model = Learner(learner_id=learner_id, **model_specs)
+    # In param_specs, we'll select the intercept term plus 3/5 covariates
+    model = Learner(**model_specs)
     # Check that model is "new"
     assert not model.has_been_fit
     assert model.opt_coefs is None
@@ -53,25 +55,23 @@ def test_model_init(model_specs):
 
 def test_model_fit(dataset, model_specs):
 
-    learner_id = (0, 1, 2, 3, 4, 5, 6)
-    model = Learner(learner_id=learner_id, **model_specs)
+    model = Learner(**model_specs)
 
     # Fit the model, don't check for correctness
-    model.fit(dataset, holdout_cols=['holdout_1', 'holdout_2'])
+    _, dataframe = dataset
+    model.fit(dataframe, holdout_cols=['holdout_1', 'holdout_2'])
     assert 0 <= model.performance <= 1
     assert model.opt_coefs is not None
     assert isinstance(model.opt_coefs, np.ndarray)
+    assert len(model.opt_coefs == 4)  # Intercept + 3 covariate terms
     assert isinstance(model.vcov, np.ndarray)
 
 
 def test_two_param_model_fit(dataset):
 
     # Sample two param model: a,b,c are mapped to mu, d,e to sigma
-
-    learner_id = (0, 1, 2)
-
+    covariate_cols, dataframe = dataset
     model = Learner(
-        learner_id=learner_id,
         model_type='tobit',
         y='y',
         param_specs={
@@ -82,30 +82,34 @@ def test_two_param_model_fit(dataset):
                 "variables": ['intercept', 'var_d', 'var_e'],
             }
         },
+        all_covariates=covariate_cols,
     )
 
     # Should have 2 mu columns, 2 sigma columns, and the intercept
     regmod_model = model._initialize_model()
     assert set(regmod_model.data.col_covs) == {'var_a', 'var_b', 'var_c', 'var_d', 'var_e', 'intercept'}
 
-    model.fit(dataset, holdout_cols=['holdout_1', 'holdout_2'])
+    model.fit(dataframe, holdout_cols=['holdout_1', 'holdout_2'])
     assert 0 <= model.performance <= 1
     assert model.opt_coefs is not None
     assert isinstance(model.opt_coefs, np.ndarray)
+    # TODO: Confirm this test case
+    # intercept is counted as a column in both mu and sigma. Is that possible?
+    # Result: intercept x2 + 5 covariates = 7 coefficients
+    assert len(model.opt_coefs) == 7
     assert isinstance(model.vcov, np.ndarray)
 
 
 def test_initialize_model_with_coefs(model_specs):
 
-    learner_id = (0, 1, 2, 3)
-    model = Learner(learner_id=learner_id, **model_specs)
+    model = Learner(**model_specs)
 
     # Set some known coefficients, random number
-    # 3 covariates implies 3 coefficients
+    # Intercept + 3 covariates implies 4 coefficients
     expected_coefs = np.array([-.5, -.3, .3, .2])
     model.opt_coefs = expected_coefs
     assert np.isclose(model.opt_coefs, expected_coefs).all()
 
     with pytest.raises(ValueError):
-        # Setting 4 coefficients on 3 variables should raise an error
+        # Setting 5 coefficients on 4 variables should raise an error
         model.opt_coefs = np.append(expected_coefs, .4)

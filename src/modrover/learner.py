@@ -20,10 +20,10 @@ class Learner:
 
     def __init__(
         self,
-        learner_id: LearnerID,
         model_type: str,
         y: str,
         param_specs: dict[str, dict],
+        all_covariates: list[str],
         offset: str = "offset",
         weights: str = "weights",
         model_eval_metric: Callable = get_rmse,
@@ -31,7 +31,6 @@ class Learner:
         """
         Initialize a Rover submodel
 
-        :param learner_id: LearnerID, represents the covariate indices to fit on
         :param model_type: str, represents what type of model, e.g. gaussian, tobit, etc.
         :param col_obs: str, which column is the target column to predict out
         :param col_covs: list[str], all possible columns that rover can explore over
@@ -41,7 +40,6 @@ class Learner:
         :param model_eval_metric:
         :param optimizer_options:
         """
-        self.learner_id = learner_id
         self.model_type = model_type
 
         # TODO: Should these be parameters to fit, or instance attributes?
@@ -50,16 +48,11 @@ class Learner:
         self.offset = offset
         self.weights = weights
         self.model_eval_metric = model_eval_metric
+        self.all_covariates = all_covariates
 
         # Initialize null model
         self._model: Optional[RegmodModel] = None
         self.performance: Optional[float] = None
-
-        # extract all covariates
-        all_covariates = set()
-        for param_spec in param_specs.values():
-            all_covariates |= set(param_spec["variables"])
-        self.all_covariates = list(all_covariates)
 
         # convert str to Variable
         # TODO: this won't be necessary in regmod v1.0.0
@@ -71,6 +64,7 @@ class Learner:
 
     @property
     def opt_coefs(self) -> Optional[np.ndarray]:
+        # TODO: If we have multiple parameters, what's the order of coefficients?
         if self._model:
             return self._model.opt_coefs
         return None
@@ -194,7 +188,7 @@ class Learner:
         model.attach_df(data)
         mat = model.mat[0]
         if np.linalg.matrix_rank(mat) < mat.shape[1]:
-            warn(f"Singular design matrix {self.learner_id=:}")
+            warn(f"Singular design matrix")
             return
 
         model.fit(**optimizer_options)
@@ -242,6 +236,3 @@ class Learner:
         model.data.detach_df()
 
         return performance
-
-    def __repr__(self):
-        return f"Learner({self.learner_id})"
