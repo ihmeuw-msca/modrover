@@ -1,15 +1,16 @@
 import numpy as np
 import pandas as pd
 
-from modrover.learner import LearnerID
+from modrover.learner import Learner
 from modrover.rover import Rover
 
 
 def test_rover():
 
-    data = np.random.randn(25, 2)
+    data = np.random.randn(25, 3)
     columns = [
         'var_a',
+        'var_b',
         'y']
     dataframe = pd.DataFrame(data, columns=columns)
     # Fill in intercept and holdout columns
@@ -20,9 +21,11 @@ def test_rover():
         model_type='gaussian',
         y='y',
         col_fixed={'mu': ['intercept']},
-        col_explore={'mu': ['var_a']},
+        col_explore=['var_a', 'var_b'],
+        explore_param='mu',
         holdout_cols=['holdout']
     )
 
-    rover.explore(dataset=dataframe, strategy='full')
-    assert set(rover.learners.keys()) == {(0,), (0, 1)}
+    rover.fit(dataset=dataframe, strategy='full', ratio_cutoff=.0)
+    assert set(rover.learners.keys()) == {tuple(), (0,), (1,), (0, 1)}
+    assert isinstance(rover.super_learner, Learner)

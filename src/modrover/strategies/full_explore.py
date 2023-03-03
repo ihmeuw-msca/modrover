@@ -8,7 +8,7 @@ class FullExplore(RoverStrategy):
 
     @property
     def base_learner_id(self) -> LearnerID:
-        return (0,)
+        return tuple()
 
     @property
     def first_layer(self) -> set[LearnerID]:
@@ -16,7 +16,7 @@ class FullExplore(RoverStrategy):
 
     @property
     def second_layer(self) -> set[LearnerID]:
-        all_cov_ids = range(1, self.num_covs + 1)
+        all_cov_ids = range(self.num_covs)
         second_layer = []
         for num_elements in range(1, self.num_covs + 1):
             second_layer.extend(map(

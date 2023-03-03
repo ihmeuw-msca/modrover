@@ -14,7 +14,7 @@ if __name__ == "__main__":
         long_description = f.read()
 
     install_requirements = [
-        "regmod>=0.0.8",
+        "regmod==0.0.8",
         "pplkit",
     ]
     test_requirements = [

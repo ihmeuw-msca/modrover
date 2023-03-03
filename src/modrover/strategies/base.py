@@ -62,22 +62,18 @@ class RoverStrategy(ABC):
         if not all(map(lambda x: 0 <= x, cov_ids)):
             raise ValueError("Cannot have negative covariate IDs")
 
-        if 0 not in cov_ids:
-            # Intercept always a fixed covariate, present in all models
-            cov_ids.insert(0, 0)
-
         return tuple(cov_ids)
 
     def _get_learner_id_children(self, learner_id: LearnerID) -> set[LearnerID]:
         """
         Create a new set of child covariate ID combinations based on the current one.
-        As an example, if we have 5 total covariates 1-5, and our current covariate ID
+        As an example, if we have 5 total explore covariates 0-4, and our current covariate ID
         is (0,1,2), this will return
-        [(0,1,2,3), (0,1,2,4), (0,1,2,5)]
+        [(0,1,2,3), (0,1,2,4)]
         :param num_covs: total number of covariates represented
         :return: A list of LearnerID classes wrapping the child covariate ID tuples
         """
-        all_covs_ids = set(range(1, self.num_covs + 1))
+        all_covs_ids = set(range(self.num_covs))
         remaining_cov_ids = all_covs_ids - set(learner_id)
         children = {
             self._as_learner_id((*learner_id, cov_id))
@@ -88,12 +84,12 @@ class RoverStrategy(ABC):
         """
         Create a parent LearnerID class with one less covariate than the current modelid.
         As an example, if our current covariate_id tuple is (0,1,2),
-        this function will return [(0,1), (0,2)]
+        this function will return [(0,1), (0,2), (1, 2)]
         :return:
         """
         parents = {
             self._as_learner_id((*learner_id[:i], *learner_id[(i + 1):]))
-            for i in range(1, len(learner_id))
+            for i in range(len(learner_id))
         }
         return parents
 
