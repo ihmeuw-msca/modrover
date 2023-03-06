@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from .exceptions import NotFittedError, InvalidConfigurationError
-from .globals import get_rmse
+from .globals import get_rmse, model_type_dict
 from .learner import Learner, LearnerID
 from .strategies import get_strategy
 from .strategies.base import RoverStrategy
@@ -81,15 +81,21 @@ class Rover:
         """Lazily unpack the provided fixed and explore covariates.
 
         Create an ordered list of all covariates represented in the dataset.
-
-        Assumption: No duplicates within or without parameter groups
         """
         if not hasattr(self, "_all_covariates"):
             all_covariates = []
-            for fixed_cols in self.col_fixed.values():
-                all_covariates.extend(fixed_cols)
 
-            all_covariates.extend(self.col_explore)
+            for parameter in self.model_class.param_names:
+                # Coefficient order in regmod is determined by the param names tuple set.
+                fixed_cols = self.col_fixed.get(parameter, [])
+                all_covariates.extend(fixed_cols)
+                if parameter == self.explore_param:
+                    # Need to record the index slice that the explore columns occupy
+                    self._explore_cols_indices = [
+                        len(all_covariates), len(all_covariates) + len(self.col_explore)
+                    ]
+                    all_covariates.extend(self.col_explore)
+
             self._all_covariates = all_covariates
 
         return self._all_covariates
@@ -108,6 +114,15 @@ class Rover:
             )
         return param_specs
 
+    @property
+    def model_class(self) -> type:
+        if self.model_type not in model_type_dict:
+            raise InvalidConfigurationError(
+                f"Model type {self.model_type} not known, "
+                f"please select from {list(model_type_dict.keys())}"
+            )
+        return model_type_dict[self.model_type]
+
     def check_is_fitted(self):
         if not self.super_learner:
             raise NotFittedError("Rover has not been ensembled yet")
@@ -120,15 +135,16 @@ class Rover:
 
         param_specs = self.default_param_specs.copy()
         if any(learner_id):
-            # Important note: The order is matters here since it determines the
-            # coefficient value mapping later.
-            # Explore columns are added at the end, so that there is a consistent offset
+            # The order matters here since we need to insert the explore cols after the fixed
+            # cols of the relevant parameter
+            # Regmod Models will always order by the parameter type, so safe to just insert
+            # at the end?
             explore_columns = [self.col_explore[i] for i in learner_id]
             param_specs[self.explore_param]['variables'] = \
                 param_specs[self.explore_param]['variables'] + explore_columns
 
         return Learner(
-            self.model_type,
+            self.model_class,
             self.y,
             param_specs,
             all_covariates=self.all_covariates,
@@ -310,12 +326,20 @@ class Rover:
         """
         # Since explore cols are appended on after the fixed columns,
         # we'll need to separate out the fixed and explore columns
-        offset = self.num_covariates - len(self.col_explore)
+        offset = self._explore_cols_indices[0]
+        offset_end = self.num_covariates - self._explore_cols_indices[1]
         row = np.zeros(self.num_covariates)
         row[:offset] = opt_coefs[:offset]
+        if offset_end:
+            # If 0, that indicates no additional fixed covariates to set
+            row[-offset_end:] = opt_coefs[-offset_end:]
         if any(learner_id):
             explore_indices = np.array(learner_id) + offset
-            row[explore_indices] = opt_coefs[offset:]
+            if offset_end:
+                explore_coefs = opt_coefs[offset:-offset_end]
+            else:
+                explore_coefs = opt_coefs[offset:]
+            row[explore_indices] = explore_coefs
         return row
 
     def _create_super_learner(

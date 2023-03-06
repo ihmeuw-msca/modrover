@@ -1,5 +1,6 @@
 from modrover.rover import Rover
 from modrover.learner import Learner
+from regmod.models.gaussian import GaussianModel
 
 import numpy as np
 import pytest
@@ -18,11 +19,13 @@ class MockLearner(Learner):
 class MockRover(Rover):
     """Mock Rover that comes 'prefit' with some mock data."""
 
-    def __init__(self, learners: dict, col_fixed: dict, col_explore: list, explore_param: str):
+    def __init__(self, learners: dict, col_fixed: dict,
+                 col_explore: list, explore_param: str, model_type: str = 'gaussian'):
         self.learners = learners
         self.col_fixed = col_fixed
         self.col_explore = col_explore
         self.explore_param = explore_param
+        self.model_type = model_type
 
 
 @pytest.fixture

@@ -47,6 +47,31 @@ def test_learner_coefficient_mapping(mock_rover):
     assert np.allclose(row, [.1, .3, 0, 0, .2])
 
 
+def test_two_parameter_coefficient_mapping(mock_rover):
+    """Test that covariate aggregation works for multiple parameter models."""
+
+    mock_rover.model_type = "tobit"
+    mock_rover.col_fixed = {
+        'mu': [0, 3],
+        'sigma': [4],
+    }
+    mock_rover.col_explore = [1, 2]
+    mock_rover.explore_param = "mu"
+
+    # Expected ordering out of a particular model:
+    # Say learner_id = (0,) - represents both parameters
+    # Expected covariate order is then [0, 3, 1, 4] - Tobit model defines mu -> sigma
+    # as the parameter order
+    # Rover appends the explore columns to the end of the mu fixed columns
+
+    learner_id, coefficients = (0, ), np.array([.1, .3, .2, .4])
+
+    row = mock_rover._learner_coefs_to_global_coefs(learner_id, coefficients)
+
+    assert np.allclose(row, [.1, .3, .2, 0, .4])
+
+
+
 def test_covariate_matrix_generation(mock_rover):
     # Check weight generation
     learner_ids, coeff_means = mock_rover._generate_coefficients_matrix()

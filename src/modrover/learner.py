@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from operator import attrgetter
-from typing import Callable, Optional
+from typing import Callable, Optional, TYPE_CHECKING
 from warnings import warn
 
 import numpy as np
@@ -10,8 +10,7 @@ from regmod.data import Data
 from regmod.models import Model as RegmodModel
 from regmod.variable import Variable
 
-from .globals import get_rmse, model_type_dict
-from .exceptions import InvalidConfigurationError
+from .globals import get_rmse
 
 LearnerID = tuple[int, ...]
 
@@ -20,7 +19,7 @@ class Learner:
 
     def __init__(
         self,
-        model_type: str,
+        model_type: type,
         y: str,
         param_specs: dict[str, dict],
         all_covariates: list[str],
@@ -76,15 +75,6 @@ class Learner:
         self._model.opt_coefs = opt_coefs
 
     @property
-    def model_class(self):
-        if self.model_type not in model_type_dict:
-            raise InvalidConfigurationError(
-                f"Model type {self.model_type} not known, "
-                f"please select from {list(model_type_dict.keys())}"
-            )
-        return model_type_dict[self.model_type]
-
-    @property
     def vcov(self) -> Optional[np.ndarray]:
         if self._model:
             return self._model.opt_vcov
@@ -126,8 +116,7 @@ class Learner:
 
         # Create regmod variables separately, by parameter
         # Initialize with fixed parameters
-        # TODO: Does intercept get counted across multiple parameters?
-        model = self.model_class(
+        model = self.model_type(
             data=data,
             param_specs=self.param_specs,
         )
