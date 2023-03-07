@@ -324,22 +324,37 @@ class Rover:
         Taking some example coefficients from this sublearner of [.1, .2, .4],
         this function will return [.1, .2, 0, .4, 0]
         """
+        # No need to do any computation if the learner ID contains every element
+        if len(learner_id) == len(self.col_explore):
+            return opt_coefs
+
         # Since explore cols are appended on after the fixed columns,
         # we'll need to separate out the fixed and explore columns
+
+        # Pad with 0's since we can't insert past the length of an array
+        padding = np.zeros(self.num_covariates - len(opt_coefs))
+        row_padded = np.concatenate([opt_coefs, padding])
         offset = self._explore_cols_indices[0]
-        offset_end = self.num_covariates - self._explore_cols_indices[1]
-        row = np.zeros(self.num_covariates)
-        row[:offset] = opt_coefs[:offset]
-        if offset_end:
-            # If 0, that indicates no additional fixed covariates to set
-            row[-offset_end:] = opt_coefs[-offset_end:]
-        if any(learner_id):
-            explore_indices = np.array(learner_id) + offset
-            if offset_end:
-                explore_coefs = opt_coefs[offset:-offset_end]
-            else:
-                explore_coefs = opt_coefs[offset:]
-            row[explore_indices] = explore_coefs
+
+        # Need to find the inverse index, since we want to insert 0's for coefficients
+        # that aren't represented
+        inverse_id = set(range(len(self.col_explore))) - set(learner_id)
+
+        # Cast to a sorted numpy array
+        inverse_id = np.array(sorted(list(inverse_id)))
+
+        # Quirk of the numpy insert algorithm: the index of the array pre-insert is used
+        # to select the indices. So we'll need to subtract the index number of each element
+        indices = np.arange(len(inverse_id))
+        inverse_id = inverse_id - indices
+
+        # Additionally, add the offset and perform the insert.
+        inverse_indices = np.array(inverse_id) + offset
+        # breakpoint()
+        row_padded = np.insert(row_padded, inverse_indices, 0)
+
+        # Trim off the padding
+        row = row_padded[:self.num_covariates]
         return row
 
     def _create_super_learner(

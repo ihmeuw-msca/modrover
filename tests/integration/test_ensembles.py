@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from modrover.globals import model_type_dict
 from modrover.learner import Learner
 from modrover.synthesizer import metrics_to_weights
 
@@ -71,7 +72,6 @@ def test_two_parameter_coefficient_mapping(mock_rover):
     assert np.allclose(row, [.1, .3, .2, 0, .4])
 
 
-
 def test_covariate_matrix_generation(mock_rover):
     # Check weight generation
     learner_ids, coeff_means = mock_rover._generate_coefficients_matrix()
@@ -130,7 +130,7 @@ def test_superlearner_creation(mock_rover):
     """Test that we can create a super learner object from rover after fitting."""
     mock_rover.get_learner = lambda learner_id, use_cache: \
         Learner(
-            model_type='gaussian',
+            model_type=model_type_dict['gaussian'],
             y='y',
             all_covariates=list(range(5)),
             param_specs={'mu': {'variables': list(range(5))}}
