@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from modrover.globals import model_type_dict
 from modrover.learner import Learner
 from modrover.synthesizer import metrics_to_weights
 
@@ -45,6 +46,30 @@ def test_learner_coefficient_mapping(mock_rover):
 
     row = mock_rover._learner_coefs_to_global_coefs(learner_id, coefficients)
     assert np.allclose(row, [.1, .3, 0, 0, .2])
+
+
+def test_two_parameter_coefficient_mapping(mock_rover):
+    """Test that covariate aggregation works for multiple parameter models."""
+
+    mock_rover.model_type = "tobit"
+    mock_rover.col_fixed = {
+        'mu': [0, 3],
+        'sigma': [4],
+    }
+    mock_rover.col_explore = [1, 2]
+    mock_rover.explore_param = "mu"
+
+    # Expected ordering out of a particular model:
+    # Say learner_id = (0,) - represents both parameters
+    # Expected covariate order is then [0, 3, 1, 4] - Tobit model defines mu -> sigma
+    # as the parameter order
+    # Rover appends the explore columns to the end of the mu fixed columns
+
+    learner_id, coefficients = (0, ), np.array([.1, .3, .2, .4])
+
+    row = mock_rover._learner_coefs_to_global_coefs(learner_id, coefficients)
+
+    assert np.allclose(row, [.1, .3, .2, 0, .4])
 
 
 def test_covariate_matrix_generation(mock_rover):
@@ -105,7 +130,7 @@ def test_superlearner_creation(mock_rover):
     """Test that we can create a super learner object from rover after fitting."""
     mock_rover.get_learner = lambda learner_id, use_cache: \
         Learner(
-            model_type='gaussian',
+            model_type=model_type_dict['gaussian'],
             y='y',
             all_covariates=list(range(5)),
             param_specs={'mu': {'variables': list(range(5))}}

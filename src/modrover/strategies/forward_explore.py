@@ -6,7 +6,7 @@ class ForwardExplore(RoverStrategy):
 
     @property
     def base_learner_id(self) -> LearnerID:
-        return (0,)
+        return tuple()
 
     def get_next_layer(
         self,

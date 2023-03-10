@@ -6,7 +6,7 @@ class BackwardExplore(RoverStrategy):
 
     @property
     def base_learner_id(self) -> LearnerID:
-        return tuple(range(self.num_covs + 1))
+        return tuple(range(self.num_covs))
 
     def get_next_layer(
         self,

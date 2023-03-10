@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from .exceptions import NotFittedError, InvalidConfigurationError
-from .globals import get_rmse
+from .globals import get_rmse, model_type_dict
 from .learner import Learner, LearnerID
 from .strategies import get_strategy
 from .strategies.base import RoverStrategy
@@ -81,15 +81,21 @@ class Rover:
         """Lazily unpack the provided fixed and explore covariates.
 
         Create an ordered list of all covariates represented in the dataset.
-
-        Assumption: No duplicates within or without parameter groups
         """
         if not hasattr(self, "_all_covariates"):
             all_covariates = []
-            for fixed_cols in self.col_fixed.values():
-                all_covariates.extend(fixed_cols)
 
-            all_covariates.extend(self.col_explore)
+            for parameter in self.model_class.param_names:
+                # Coefficient order in regmod is determined by the param names tuple set.
+                fixed_cols = self.col_fixed.get(parameter, [])
+                all_covariates.extend(fixed_cols)
+                if parameter == self.explore_param:
+                    # Need to record the index slice that the explore columns occupy
+                    self._explore_cols_indices = [
+                        len(all_covariates), len(all_covariates) + len(self.col_explore)
+                    ]
+                    all_covariates.extend(self.col_explore)
+
             self._all_covariates = all_covariates
 
         return self._all_covariates
@@ -108,6 +114,15 @@ class Rover:
             )
         return param_specs
 
+    @property
+    def model_class(self) -> type:
+        if self.model_type not in model_type_dict:
+            raise InvalidConfigurationError(
+                f"Model type {self.model_type} not known, "
+                f"please select from {list(model_type_dict.keys())}"
+            )
+        return model_type_dict[self.model_type]
+
     def check_is_fitted(self):
         if not self.super_learner:
             raise NotFittedError("Rover has not been ensembled yet")
@@ -120,15 +135,16 @@ class Rover:
 
         param_specs = self.default_param_specs.copy()
         if any(learner_id):
-            # Important note: The order is matters here since it determines the
-            # coefficient value mapping later.
-            # Explore columns are added at the end, so that there is a consistent offset
+            # The order matters here since we need to insert the explore cols after the fixed
+            # cols of the relevant parameter
+            # Regmod Models will always order by the parameter type, so safe to just insert
+            # at the end?
             explore_columns = [self.col_explore[i] for i in learner_id]
             param_specs[self.explore_param]['variables'] = \
                 param_specs[self.explore_param]['variables'] + explore_columns
 
         return Learner(
-            self.model_type,
+            self.model_class,
             self.y,
             param_specs,
             all_covariates=self.all_covariates,
@@ -308,14 +324,37 @@ class Rover:
         Taking some example coefficients from this sublearner of [.1, .2, .4],
         this function will return [.1, .2, 0, .4, 0]
         """
+        # No need to do any computation if the learner ID contains every element
+        if len(learner_id) == len(self.col_explore):
+            return opt_coefs
+
         # Since explore cols are appended on after the fixed columns,
         # we'll need to separate out the fixed and explore columns
-        offset = self.num_covariates - len(self.col_explore)
-        row = np.zeros(self.num_covariates)
-        row[:offset] = opt_coefs[:offset]
-        if any(learner_id):
-            explore_indices = np.array(learner_id) + offset
-            row[explore_indices] = opt_coefs[offset:]
+
+        # Pad with 0's since we can't insert past the length of an array
+        padding = np.zeros(self.num_covariates - len(opt_coefs))
+        row_padded = np.concatenate([opt_coefs, padding])
+        offset = self._explore_cols_indices[0]
+
+        # Need to find the inverse index, since we want to insert 0's for coefficients
+        # that aren't represented
+        inverse_id = set(range(len(self.col_explore))) - set(learner_id)
+
+        # Cast to a sorted numpy array
+        inverse_id = np.array(sorted(list(inverse_id)))
+
+        # Quirk of the numpy insert algorithm: the index of the array pre-insert is used
+        # to select the indices. So we'll need to subtract the index number of each element
+        indices = np.arange(len(inverse_id))
+        inverse_id = inverse_id - indices
+
+        # Additionally, add the offset and perform the insert.
+        inverse_indices = np.array(inverse_id) + offset
+        # breakpoint()
+        row_padded = np.insert(row_padded, inverse_indices, 0)
+
+        # Trim off the padding
+        row = row_padded[:self.num_covariates]
         return row
 
     def _create_super_learner(

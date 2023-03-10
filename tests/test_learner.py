@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from modrover.globals import model_type_dict
 from modrover.learner import Learner, LearnerID
 
 
@@ -28,7 +29,7 @@ def dataset():
 def model_specs(dataset):
     all_covariates, _ = dataset
     specs = dict(
-        model_type='gaussian',
+        model_type=model_type_dict['gaussian'],
         y='y',
         param_specs={
             'mu': {"variables": ['intercept', 'var_a', 'var_b', 'var_c']}
@@ -72,7 +73,7 @@ def test_two_param_model_fit(dataset):
     # Sample two param model: a,b,c are mapped to mu, d,e to sigma
     covariate_cols, dataframe = dataset
     model = Learner(
-        model_type='tobit',
+        model_type=model_type_dict['tobit'],
         y='y',
         param_specs={
             'mu': {
@@ -93,9 +94,7 @@ def test_two_param_model_fit(dataset):
     assert 0 <= model.performance <= 1
     assert model.opt_coefs is not None
     assert isinstance(model.opt_coefs, np.ndarray)
-    # TODO: Confirm this test case
-    # intercept is counted as a column in both mu and sigma. Is that possible?
-    # Result: intercept x2 + 5 covariates = 7 coefficients
+    # Result: intercept + 5 covariates + intercept = 7 coefficients
     assert len(model.opt_coefs) == 7
     assert isinstance(model.vcov, np.ndarray)
 
