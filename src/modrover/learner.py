@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from operator import attrgetter
-from typing import Callable, Optional, TYPE_CHECKING
+from typing import Callable, Optional
 from warnings import warn
 
 import numpy as np
+from numpy.typing import NDArray
 from pandas import DataFrame
 from regmod.data import Data
 from regmod.models import Model as RegmodModel
@@ -16,13 +17,11 @@ LearnerID = tuple[int, ...]
 
 
 class Learner:
-
     def __init__(
         self,
         model_type: type,
-        y: str,
+        obs: str,
         param_specs: dict[str, dict],
-        all_covariates: list[str],
         offset: str = "offset",
         weights: str = "weights",
         model_eval_metric: Callable = get_rmse,
@@ -42,12 +41,11 @@ class Learner:
         self.model_type = model_type
 
         # TODO: Should these be parameters to fit, or instance attributes?
-        self.y = y
+        self.obs = obs
         # TODO: offset will be gone in the regmod v1.0.0
         self.offset = offset
         self.weights = weights
         self.model_eval_metric = model_eval_metric
-        self.all_covariates = all_covariates
 
         # Initialize null model
         self._model: Optional[RegmodModel] = None
@@ -56,49 +54,54 @@ class Learner:
         # convert str to Variable
         # TODO: this won't be necessary in regmod v1.0.0
         for param_spec in param_specs.values():
-            param_spec["variables"] = list(map(
-                Variable, param_spec["variables"]
-            ))
+            param_spec["variables"] = list(map(Variable, param_spec["variables"]))
         self.param_specs = param_specs
 
     @property
-    def opt_coefs(self) -> Optional[np.ndarray]:
-        # TODO: If we have multiple parameters, what's the order of coefficients?
+    def coef(self) -> Optional[NDArray]:
         if self._model:
             return self._model.opt_coefs
         return None
 
-    @opt_coefs.setter
-    def opt_coefs(self, opt_coefs: np.ndarray):
+    @coef.setter
+    def coef(self, coef: NDArray):
         if not self._model:
             self._model = self._initialize_model()
-        self._model.opt_coefs = opt_coefs
+        self._model.opt_coefs = coef
 
     @property
-    def vcov(self) -> Optional[np.ndarray]:
+    def vcov(self) -> Optional[NDArray]:
         if self._model:
             return self._model.opt_vcov
         return None
+
+    @vcov.setter
+    def vcov(self, vcov: NDArray):
+        if not self._model:
+            self._model = self._initialize_model()
+        self._model.opt_vcov = vcov
 
     @property
     def has_been_fit(self) -> bool:
         """
         Check if our fit method has been called, by checking whether the model is null.
         """
-        return self.opt_coefs is not None
+        return self.coef is not None
 
     @property
     def df_coefs(self) -> Optional[DataFrame]:
-        if not self.opt_coefs:
+        if not self.coef:
             return None
         # TODO: Update this datastructure to be flexible with multiple parameters.
         # Should reflect final all-data model, perhaps prefix with parameter name
         # Is this full structure necessary? Or just the means?
-        data = DataFrame({
-            "cov_name": map(attrgetter("name"), self._model.params[0].variables),
-            "mean": self.opt_coefs,
-            "sd": np.sqrt(np.diag(self.vcov))
-        })
+        data = DataFrame(
+            {
+                "cov_name": map(attrgetter("name"), self._model.params[0].variables),
+                "mean": self.coef,
+                "sd": np.sqrt(np.diag(self.vcov)),
+            }
+        )
         return data
 
     def _initialize_model(self) -> RegmodModel:
@@ -108,10 +111,10 @@ class Learner:
 
         # TODO: this shouldn't be necessary in regmod v1.0.0
         data = Data(
-            col_obs=self.y,
-            col_covs=self.all_covariates,
+            col_obs=self.obs,
             col_offset=self.offset,
             col_weights=self.weights,
+            subset_cols=False,
         )
 
         # Create regmod variables separately, by parameter
@@ -126,14 +129,14 @@ class Learner:
     def fit(
         self,
         data: DataFrame,
-        holdout_cols: Optional[list[str]] = None,
-        **optimizer_options
+        holdouts: Optional[list[str]] = None,
+        **optimizer_options,
     ):
         """
         Fit a set of models on a series of holdout datasets.
 
         This method will fit a model over k folds of the dataset, where k is the length
-        of the provided holdout_cols list. It is up to the user to decide the train-test
+        of the provided holdouts list. It is up to the user to decide the train-test
         splits for each holdout column.
 
         On each fold of the dataset, the trained model will predict out on the validation set
@@ -143,23 +146,23 @@ class Learner:
         Finally, a model is trained with all data in order to generate the final coefficients.
 
         :param data: a dataframe containing the training data
-        :param holdout_cols: which column names to iterate over for cross validation
+        :param holdouts: which column names to iterate over for cross validation
         :return:
         """
         if self.performance:
             # Learner already has been fit, exit early
             return
-        if holdout_cols:
+        if holdouts:
             # If holdout cols are provided, loop through to calculate OOS performance
-            performance = 0.
-            for col in holdout_cols:
+            performance = 0.0
+            for col in holdouts:
                 model = self._initialize_model()
                 # Subset the data
                 train_set = data.loc[data[col] == 0]
                 test_set = data.loc[data[col] == 1]
                 self._fit(model, train_set, **optimizer_options)
                 performance += self.score(test_set, model)
-            performance /= len(holdout_cols)  # Divide by k to get an unweighted average
+            performance /= len(holdouts)  # Divide by k to get an unweighted average
 
             # Learner performance is average performance across each k fold
             self.performance = performance
@@ -169,11 +172,10 @@ class Learner:
         self._fit(self._model, data, **optimizer_options)
 
         # If holdout cols not provided, use in sample score for the full data model
-        if not holdout_cols:
+        if not holdouts:
             self.performance = self.score(data, self._model)
 
     def _fit(self, model: RegmodModel, data: DataFrame, **optimizer_options) -> None:
-
         model.attach_df(data)
         mat = model.mat[0]
         if np.linalg.matrix_rank(mat) < mat.shape[1]:
@@ -182,7 +184,7 @@ class Learner:
 
         model.fit(**optimizer_options)
 
-    def predict(self, model: RegmodModel, test_set: DataFrame) -> np.ndarray:
+    def predict(self, model: RegmodModel, test_set: DataFrame) -> NDArray:
         """
         Wraps regmod's predict method to avoid modifying input dataset.
 
@@ -216,7 +218,7 @@ class Learner:
             model = self._model
 
         preds = self.predict(model, test_set)
-        observed = test_set[self.y]
+        observed = test_set[self.obs]
         performance = self.model_eval_metric(
             obs=observed.array,
             pred=preds,
