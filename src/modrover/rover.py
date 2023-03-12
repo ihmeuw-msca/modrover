@@ -174,6 +174,7 @@ class Rover:
         param_specs.update({self.main_param: {"variables": self.cov_fixed}})
         return param_specs
 
+    # construct learner ========================================================
     def _get_param_specs(self, learner_id: LearnerID) -> dict[str, dict]:
         param_specs = deepcopy(self.param_specs)
         param_specs[self.main_param]["variables"].extend(
@@ -225,7 +226,7 @@ class Rover:
             )
             curr_ids = next_ids
 
-    # ensemble super learner ===================================================
+    # construct super learner ===================================================
     def _get_super_learner(
         self, max_num_models: int, kernel_param: float, ratio_cutoff: float
     ) -> Learner:
