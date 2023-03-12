@@ -16,7 +16,6 @@ def test_rover():
     rover = Rover(
         model_type="gaussian",
         obs="y",
-        param="mu",
         cov_fixed=["intercept"],
         cov_exploring=["var_a", "var_b"],
         holdouts=["holdout"],
@@ -37,9 +36,9 @@ def test_two_parameter_rover():
     rover = Rover(
         model_type="tobit",
         obs="y",
-        param="mu",
         cov_fixed=["intercept", "var_a"],
         cov_exploring=["var_c", "var_d"],
+        main_param="mu",
         param_specs={"sigma": {"variables": ["intercept", "var_b"]}},
         holdouts=["holdout"],
     )

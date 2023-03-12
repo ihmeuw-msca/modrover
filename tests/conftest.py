@@ -3,7 +3,7 @@ from typing import Optional
 import numpy as np
 import pytest
 
-from modrover.learner import Learner
+from modrover.learner import Learner, LearnerID
 from modrover.rover import Rover
 
 
@@ -24,19 +24,19 @@ class MockRover(Rover):
 
     def __init__(
         self,
-        learners: dict,
-        param: str,
-        cov_fixed: dict,
-        cov_exploring: list,
+        learners: dict[LearnerID, Learner],
+        main_param: str,
+        cov_fixed: list[str],
+        cov_exploring: list[str],
         param_specs: Optional[dict[str, dict]] = None,
         model_type: str = "gaussian",
     ):
+        self.model_type = self._as_model_type(model_type)
+        self.main_param = self._as_main_param(main_param)
+        self.cov_fixed, self.cov_exploring = self._as_cov(cov_fixed, cov_exploring)
+        self.param_specs = self._as_param_specs(param_specs)
+
         self.learners = learners
-        self.param = param
-        self.cov_fixed = cov_fixed
-        self.cov_exploring = cov_exploring
-        self.param_specs = param_specs
-        self.model_type = model_type
 
 
 @pytest.fixture
@@ -53,7 +53,7 @@ def mock_rover():
 
     rover = MockRover(
         learners=learners,
-        param="mu",
+        main_param="mu",
         cov_fixed=[0],
         cov_exploring=[1, 2, 3, 4],
     )

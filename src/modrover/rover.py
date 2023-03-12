@@ -48,26 +48,20 @@ class Rover:
         self,
         model_type: str,
         obs: str,
-        param: str,
         cov_fixed: list[str],
         cov_exploring: list[str],
+        main_param: Optional[str] = None,
         param_specs: Optional[dict[str, dict]] = None,
         offset: str = "offset",
         weights: str = "weights",
         holdouts: Optional[list[str]] = None,
         model_eval_metric: Callable = get_rmse,
     ) -> None:
-        # parse param_specs
-        if param_specs is None:
-            param_specs = {}
-
-        self.model_type = model_type
+        self.model_type = self._as_model_type(model_type)
         self.obs = obs
-        self.param = param
-        self.cov_fixed = cov_fixed
-        self.cov_exploring = cov_exploring
-
-        self.param_specs = param_specs
+        self.cov_fixed, self.cov_exploring = self._as_cov(cov_fixed, cov_exploring)
+        self.main_param = self._as_main_param(main_param)
+        self.param_specs = self._as_param_specs(param_specs)
         self.offset = offset
         self.weights = weights
         self.holdouts = holdouts
@@ -75,66 +69,19 @@ class Rover:
 
         self.learners: dict[LearnerID, Learner] = {}
 
-        self.super_learner = None
-
-        # TODO: validate the inputs
-        # ...
-
-    @property
-    def num_covs(self) -> int:
-        num_cov = len(self.cov_exploring) + sum(
-            len(self.param_specs[param]["variables"])
-            for param in self.model_class.param_names
-        )
-        return num_cov
-
     @property
     def model_class(self) -> type:
-        if self.model_type not in model_type_dict:
-            raise InvalidConfigurationError(
-                f"Model type {self.model_type} not known, "
-                f"please select from {list(model_type_dict.keys())}"
-            )
         return model_type_dict[self.model_type]
 
     @property
-    def param_specs(self) -> dict[str, dict]:
-        return self._param_specs
+    def params(self) -> tuple[str, ...]:
+        return self.model_class.param_names
 
-    @param_specs.setter
-    def param_specs(self, param_specs: Optional[dict[str, dict]]):
-        if param_specs is None:
-            param_specs = {}
-        param_specs.update({self.param: {"variables": self.cov_fixed}})
-        self._param_specs = param_specs
-
-    def check_is_fitted(self):
-        if not self.super_learner:
+    @property
+    def super_learner(self) -> Learner:
+        if not hasattr(self, "_super_learner"):
             raise NotFittedError("Rover has not been ensembled yet")
-
-    def _get_param_specs(self) -> dict[str, dict]:
-        param_specs = {}
-        if self._param_specs is not None:
-            param_specs = self._param_specs.copy()
-        param_specs.update({self.param: {"variables": self.cov_fixed.copy()}})
-        return param_specs
-
-    def _get_learner(self, learner_id: LearnerID, use_cache: bool = True) -> Learner:
-        if learner_id in self.learners and use_cache:
-            return self.learners[learner_id]
-
-        param_specs = deepcopy(self.param_specs)
-        param_specs[self.param]["variables"].extend(
-            [self.cov_exploring[i] for i in learner_id]
-        )
-        return Learner(
-            self.model_class,
-            self.obs,
-            param_specs,
-            offset=self.offset,
-            weights=self.weights,
-            model_eval_metric=self.model_eval_metric,
-        )
+        return self._super_learner
 
     def fit(
         self,
@@ -167,8 +114,88 @@ class Rover:
             kernel_param=kernel_param,
             ratio_cutoff=ratio_cutoff,
         )
-        self.super_learner = super_learner
+        self._super_learner = super_learner
 
+    def predict(self, dataset):
+        return self.super_learner.predict(dataset)
+
+    def summary(self):
+        NotImplemented
+
+    # validations ==============================================================
+    def _as_model_type(self, model_type: str) -> str:
+        if model_type not in model_type_dict:
+            raise InvalidConfigurationError(
+                f"{model_type=:} not known, "
+                f"please select from {list(model_type_dict.keys())}"
+            )
+        return model_type
+
+    def _as_cov(
+        self, cov_fixed: list[str], cov_exploring: list[str]
+    ) -> tuple[list[str], list[str]]:
+        len_set = len(set(cov_fixed) | set(cov_exploring))
+        len_sum = len(cov_fixed) + len(cov_exploring)
+        if len_set != len_sum:
+            raise InvalidConfigurationError(
+                "Covariates in cov_fixed and cov_exploring cannot repeat"
+            )
+        return list(cov_fixed), list(cov_exploring)
+
+    def _as_main_param(self, main_param: Optional[str]) -> str:
+        params = self.params
+        if main_param is not None:
+            if main_param not in params:
+                raise InvalidConfigurationError(
+                    f"{main_param=:} not know, " f"please select from {params}"
+                )
+        else:
+            if len(params) > 1:
+                raise InvalidConfigurationError(
+                    "There are more than one model parameters, "
+                    f"please select main_param from {params}"
+                )
+            main_param = params[0]
+        return main_param
+
+    def _as_param_specs(
+        self, param_specs: Optional[dict[str, dict]]
+    ) -> dict[str, dict]:
+        param_specs = param_specs or {}
+        for param in self.params:
+            if param != self.main_param:
+                variables = param_specs.get(param, {}).get("variables", [])
+                if len(variables) == 0:
+                    example_param_specs = {param: {"variables": ["intercept"]}}
+                    raise InvalidConfigurationError(
+                        f"Please provide variables for {param}, "
+                        f"for example, param_specs={example_param_specs}"
+                    )
+        param_specs.update({self.main_param: {"variables": self.cov_fixed}})
+        return param_specs
+
+    def _get_param_specs(self, learner_id: LearnerID) -> dict[str, dict]:
+        param_specs = deepcopy(self.param_specs)
+        param_specs[self.main_param]["variables"].extend(
+            [self.cov_exploring[i] for i in learner_id]
+        )
+        return param_specs
+
+    def _get_learner(self, learner_id: LearnerID, use_cache: bool = True) -> Learner:
+        if learner_id in self.learners and use_cache:
+            return self.learners[learner_id]
+
+        param_specs = self._get_param_specs(learner_id)
+        return Learner(
+            self.model_class,
+            self.obs,
+            param_specs,
+            offset=self.offset,
+            weights=self.weights,
+            model_eval_metric=self.model_eval_metric,
+        )
+
+    # explore ==================================================================
     def _explore(self, dataset: DataFrame, strategy: Union[str, RoverStrategy]):
         """Explore the entire tree of learners.
 
@@ -197,7 +224,21 @@ class Rover:
                 curr_layer=curr_ids, learners=self.learners
             )
             curr_ids = next_ids
-        return
+
+    # ensemble super learner ===================================================
+    def _get_super_learner(
+        self, max_num_models: int, kernel_param: float, ratio_cutoff: float
+    ) -> Learner:
+        """Call at the end of fit, so model is configured at the end of fit."""
+        means = self._get_super_coef(
+            max_num_models=max_num_models,
+            kernel_param=kernel_param,
+            ratio_cutoff=ratio_cutoff,
+        )
+        master_learner_id = tuple(range(len(self.cov_exploring)))
+        learner = self._get_learner(learner_id=master_learner_id, use_cache=False)
+        learner.coef = means
+        return learner
 
     def _get_super_coef(
         self,
@@ -257,41 +298,23 @@ class Rover:
         ]
 
         # collect the coefficients from all models
-        coef_mat = np.zeros((len(learner_ids), self.num_covs))
+        num_vars = len(self.cov_exploring) + sum(
+            len(self.param_specs[param]["variables"]) for param in self.params
+        )
+        coef_mat = np.zeros((len(learner_ids), num_vars))
         for row, learner_id in enumerate(learner_ids):
             coef_index = self._get_coef_index(learner_id)
             coef_mat[row, coef_index] = self.learners[learner_id].coef
 
         return learner_ids, coef_mat
 
-    def _get_coef_index(self, learner_id: LearnerID) -> tuple[int, ...]:
+    def _get_coef_index(self, learner_id: LearnerID) -> list[int]:
         coef_index, pointer = [], 0
-        for param in self.model_class.param_names:
+        for param in self.params:
             num_covs = len(self.param_specs[param]["variables"])
             coef_index.extend(list(range(pointer, pointer + num_covs)))
             pointer += num_covs
-            if param == self.param:
+            if param == self.main_param:
                 coef_index.extend([i + pointer for i in learner_id])
                 pointer += len(self.cov_exploring)
         return coef_index
-
-    def _get_super_learner(
-        self, max_num_models: int, kernel_param: float, ratio_cutoff: float
-    ) -> Learner:
-        """Call at the end of fit, so model is configured at the end of fit."""
-        means = self._get_super_coef(
-            max_num_models=max_num_models,
-            kernel_param=kernel_param,
-            ratio_cutoff=ratio_cutoff,
-        )
-        master_learner_id = tuple(range(len(self.cov_exploring)))
-        learner = self._get_learner(learner_id=master_learner_id, use_cache=False)
-        learner.coef = means
-        return learner
-
-    def predict(self, dataset):
-        self.check_is_fitted()
-        return self.super_learner.predict(dataset)
-
-    def summary(self):
-        NotImplemented

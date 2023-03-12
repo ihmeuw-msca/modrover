@@ -6,7 +6,6 @@ def test_get_learner():
     rover = Rover(
         model_type="gaussian",
         obs="obs",
-        param="mu",
         cov_fixed=["intercept"],
         cov_exploring=["cov1", "cov2", "cov3"],
     )
@@ -25,12 +24,11 @@ def test_empty_learner_id():
     rover = Rover(
         model_type="gaussian",
         obs="obs",
-        param="mu",
         cov_fixed=["intercept"],
         cov_exploring=["cov1", "cov2", "cov3"],
     )
 
-    assert rover._get_param_specs() == {"mu": {"variables": ["intercept"]}}
+    assert rover._get_param_specs(tuple()) == {"mu": {"variables": ["intercept"]}}
 
     learner = rover._get_learner(tuple())
     variables = learner.param_specs["mu"]["variables"]

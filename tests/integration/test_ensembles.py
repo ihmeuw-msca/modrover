@@ -36,8 +36,6 @@ def test_create_weights(metrics, num_models, kernel_param, ratio_cutoff, expecta
 
 
 def test_get_coef_index(mock_rover):
-    assert mock_rover.num_covs == 5
-
     # Given some faux coefficients, get the correct global coefficients
     # Since learner ids represent indices of explore columns, we have the expected mapping
     #   .1 = coefficient of col 0
@@ -55,7 +53,7 @@ def test_two_parameter_get_coef_index(mock_rover):
     mock_rover.param = "mu"
     mock_rover.cov_fixed = [0, 3]
     mock_rover.cov_exploring = [1, 2]
-    mock_rover.param_specs = {"sigma": {"variables": [4]}}
+    mock_rover.param_specs = mock_rover._as_param_specs({"sigma": {"variables": [4]}})
 
     # Expected ordering out of a particular model:
     # Say learner_id = (0,) - represents both parameters
@@ -75,16 +73,13 @@ def test_get_coef_mat(mock_rover):
     # Check that the aggregation is correct
     assert len(learner_ids) == len(coef_mat)
 
-    for learner_id, coeff_row in zip(learner_ids, coef_mat):
+    for learner_id, coef_row in zip(learner_ids, coef_mat):
         # Offset of 1 since we have 1 fixed covariate from conftest
         # include the 0 fixed covariate
         indices = np.array(learner_id) + 1
-        indices = np.concatenate([np.zeros(1, dtype=np.int8), indices])
-        assert np.allclose(coeff_row[indices], mock_rover.learners[learner_id].coef)
-        assert np.allclose(
-            np.delete(coeff_row, indices),
-            np.zeros(mock_rover.num_covs - len(learner_id) - 1),
-        )
+        indices = np.hstack([0, indices])
+        assert np.allclose(coef_row[indices], mock_rover.learners[learner_id].coef)
+        assert np.allclose(np.delete(coef_row, indices), 0)
 
 
 def test_get_super_coef(mock_rover):
@@ -102,7 +97,7 @@ def test_get_super_coef(mock_rover):
     # With high cutoff, only single model is selected. Coefficients same as that single model
     best_learner_id = (1, 3)
     coef_index = mock_rover._get_coef_index(best_learner_id)
-    expected_coef = np.zeros(mock_rover.num_covs)
+    expected_coef = np.zeros(5)
     expected_coef[coef_index] = mock_rover.learners[best_learner_id].coef
 
     assert np.allclose(single_model_coeffs, expected_coef)
