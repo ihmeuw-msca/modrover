@@ -15,11 +15,11 @@ from modrover.synthesizer import metrics_to_weights
         (np.array([1, 0.5, 1]), 10, 1, 0.99, np.array([0.5, 0, 0.5])),
         # Lowering the threshold should return two values with unequal weights
         (np.array([1, 0.8, 0]), 10, 1, 0.7, np.array([0.55, 0.45, 0])),
-        # Increasing the kernel parameter should bias towards the better performances
+        # Increasing the kernel parameter should bias towards the better scores
         (np.array([1, 0.8, 0]), 10, 10, 0.7, np.array([0.88, 0.12, 0])),
         # Lowering the num_models param should only return a max number of non zero weights
         (np.array([1, 0.8, 0]), 1, 1, 0.7, np.array([1, 0, 0])),
-        # Negative values for performances handled gracefully
+        # Negative values for scores handled gracefully
         (
             np.array([-0.5, -0.3, 0.2, 0.4]),
             10,
@@ -85,7 +85,7 @@ def test_get_coef_mat(mock_rover):
 def test_get_super_coef(mock_rover):
     """Check the ensembled coefficients.
 
-    Summary of performances, as defined by mock_rover:
+    Summary of scores, as defined by mock_rover:
     (1,3) - 1.2
     (2,3) - 1.0
     (3) - -0.3

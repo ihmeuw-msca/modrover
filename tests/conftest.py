@@ -10,8 +10,8 @@ from modrover.rover import Rover
 class MockLearner(Learner):
     """Mock learner that comes 'prefit' with coefficients."""
 
-    def __init__(self, coefficients: np.ndarray, performance: float):
-        self.performance = performance
+    def __init__(self, coefficients: np.ndarray, score: float):
+        self.score = score
         self.model = (
             lambda: None
         )  # arbitrary mutable object that we can assign weights to

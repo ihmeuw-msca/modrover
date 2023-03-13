@@ -36,7 +36,7 @@ def test_model_init(model_specs):
     # Check that model is "new"
     assert learner.status == ModelStatus.NOT_FITTED
     assert learner.coef is None
-    assert learner.performance is None
+    assert learner.score is None
 
 
 def test_model_fit(dataset, model_specs):
@@ -44,7 +44,7 @@ def test_model_fit(dataset, model_specs):
 
     # Fit the model, don't check for correctness
     learner.fit(dataset, holdouts=["holdout_1", "holdout_2"])
-    assert 0 <= learner.performance <= 1
+    assert 0 <= learner.score <= 1
     assert learner.coef is not None
     assert isinstance(learner.coef, np.ndarray)
     assert len(learner.coef == 4)  # Intercept + 3 covariate terms
@@ -68,7 +68,7 @@ def test_two_param_model_fit(dataset):
 
     # Should have 2 mu columns, 2 sigma columns, and the intercept
     learner.fit(dataset, holdouts=["holdout_1", "holdout_2"])
-    assert 0 <= learner.performance <= 1
+    assert 0 <= learner.score <= 1
     assert learner.coef is not None
     assert isinstance(learner.coef, np.ndarray)
     # Result: intercept + 5 covariates + intercept = 7 coefficients

@@ -38,8 +38,8 @@ class Rover:
     holdouts
         A list of column names containing 1's and 0's that represent folds in
         the rover cross-validation algorithm
-    model_eval_metric
-        A callable used to evaluate cross-validated performance of sub-learners
+    get_score
+        A callable used to evaluate cross-validated score of sub-learners
         in rover
 
     """
@@ -55,7 +55,7 @@ class Rover:
         offset: str = "offset",
         weights: str = "weights",
         holdouts: Optional[list[str]] = None,
-        model_eval_metric: Callable = get_rmse,
+        get_score: Callable = get_rmse,
     ) -> None:
         self.model_type = self._as_model_type(model_type)
         self.obs = obs
@@ -65,7 +65,7 @@ class Rover:
         self.offset = offset
         self.weights = weights
         self.holdouts = holdouts
-        self.model_eval_metric = model_eval_metric
+        self.get_score = get_score
 
         self.learners: dict[LearnerID, Learner] = {}
 
@@ -104,7 +104,7 @@ class Rover:
         :param strategy: the selection strategy to determine the model tree
         :param max_num_models: the maximum number of models to consider for ensembling
         :param kernel_param: the kernel parameter used to determine bias in ensemble weights
-        :param ratio_cutoff: the cross-validated performance score necessary for a learner to
+        :param ratio_cutoff: the cross-validated score score necessary for a learner to
             be considered in ensembling
         :return: None
         """
@@ -193,7 +193,7 @@ class Rover:
             param_specs,
             offset=self.offset,
             weights=self.weights,
-            model_eval_metric=self.model_eval_metric,
+            get_score=self.get_score,
         )
 
     # explore ==================================================================
@@ -252,8 +252,8 @@ class Rover:
 
         :param max_num_models: The maximum number of learners to consider for our weights
         :param kernel_param: The kernel parameter, amount with which to bias towards strongest
-            performances
-        :param ratio_cutoff: The performance floor which learners must exceed to be considered
+            scores
+        :param ratio_cutoff: The score floor which learners must exceed to be considered
             in the ensemble weights
         :return: A vector of weighted coefficients aggregated from sufficiently-performing
             sublearners.
@@ -269,9 +269,9 @@ class Rover:
         learner_ids, coef_mat = self._get_coef_mat()
 
         # Create weights
-        performances = np.array([self.learners[key].performance for key in learner_ids])
+        scores = np.array([self.learners[key].score for key in learner_ids])
         weights = metrics_to_weights(
-            metrics=performances,
+            metrics=scores,
             max_num_models=max_num_models,
             kernel_param=kernel_param,
             ratio_cutoff=ratio_cutoff,

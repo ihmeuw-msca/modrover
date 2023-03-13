@@ -26,7 +26,7 @@ class RoverStrategy(ABC):
         self,
         curr_layer: set[LearnerID],
         learners: dict[LearnerID, Learner],
-        **kwargs
+        **kwargs,
     ) -> set[LearnerID]:
         """Abstract method to generate the next set of learner IDs."""
 
@@ -76,8 +76,8 @@ class RoverStrategy(ABC):
         all_covs_ids = set(range(self.num_covs))
         remaining_cov_ids = all_covs_ids - set(learner_id)
         children = {
-            self._as_learner_id((*learner_id, cov_id))
-            for cov_id in remaining_cov_ids}
+            self._as_learner_id((*learner_id, cov_id)) for cov_id in remaining_cov_ids
+        }
         return children
 
     def _get_learner_id_parents(self, learner_id: LearnerID) -> set[LearnerID]:
@@ -88,7 +88,7 @@ class RoverStrategy(ABC):
         :return:
         """
         parents = {
-            self._as_learner_id((*learner_id[:i], *learner_id[(i + 1):]))
+            self._as_learner_id((*learner_id[:i], *learner_id[(i + 1) :]))
             for i in range(len(learner_id))
         }
         return parents
@@ -98,7 +98,7 @@ class RoverStrategy(ABC):
         curr_layer: set[LearnerID],
         learners: dict[LearnerID, Learner],
         min_improvement: float = 1.0,
-        max_len: int = 1
+        max_len: int = 1,
     ) -> set[LearnerID]:
         """Filter out low-performing covariate ids from selection.
 
@@ -108,8 +108,7 @@ class RoverStrategy(ABC):
         Return the remainder
         """
         sorted_learner_ids = sorted(
-            curr_layer,
-            key=lambda learner_id: learners[learner_id].performance
+            curr_layer, key=lambda learner_id: learners[learner_id].score
         )
         # Select the best max_len learner ids
         learner_ids = set(sorted_learner_ids[-max_len:])
@@ -121,10 +120,10 @@ class RoverStrategy(ABC):
                 learner_id,
                 learners,
             )
-            curr_performance = learners[learner_id].performance
+            curr_score = learners[learner_id].score
             for upstream_learner_id in upstream_learner_ids:
-                prev_performance = learners[upstream_learner_id].performance
-                if curr_performance / prev_performance < min_improvement:
+                prev_score = learners[upstream_learner_id].score
+                if curr_score / prev_score < min_improvement:
                     learner_ids_to_remove.add(learner_id)
                     break
 

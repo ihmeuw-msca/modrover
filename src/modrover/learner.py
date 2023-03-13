@@ -39,8 +39,8 @@ class Learner:
         Name corresponding to the offset column in the data frame
     weights
         Name corresponding to the weights column in the data frame
-    model_eval_metric
-        Function that evaluate the performance of of the model
+    get_score
+        Function that evaluate the score of of the model
 
     """
 
@@ -51,13 +51,13 @@ class Learner:
         param_specs: dict[str, dict],
         offset: str = "offset",
         weights: str = "weights",
-        model_eval_metric: Callable = get_rmse,
+        get_score: Callable = get_rmse,
     ) -> None:
         self.model_class = model_class
         self.obs = obs
         self.offset = offset
         self.weights = weights
-        self.model_eval_metric = model_eval_metric
+        self.get_score = get_score
 
         # convert str to Variable
         for param_spec in param_specs.values():
@@ -66,12 +66,12 @@ class Learner:
 
         # initialize null model
         self.model = self._get_model()
-        self.performance: Optional[float] = None
+        self.score: Optional[float] = None
         self.status = ModelStatus.NOT_FITTED
 
         # initialize cross validation model
         self._cv_models = defaultdict(self._get_model)
-        self._cv_performances = defaultdict(lambda: None)
+        self._cv_scores = defaultdict(lambda: None)
         self._cv_status = defaultdict(lambda: ModelStatus.NOT_FITTED)
 
     @property
@@ -142,8 +142,8 @@ class Learner:
         splits for each holdout column.
 
         On each fold of the dataset, the trained model will predict out on the validation set
-        and obtain a score. The averaged score across all folds becomes the model's overall
-        performance.
+        and obtain a evaluate. The averaged evaluate across all folds becomes the model's overall
+        score.
 
         Finally, a model is trained with all data in order to generate the final coefficients.
 
@@ -151,10 +151,10 @@ class Learner:
         :param holdouts: which column names to iterate over for cross validation
         :return:
         """
-        if self.performance:
+        if self.status != ModelStatus.NOT_FITTED:
             return
         if holdouts:
-            # If holdout cols are provided, loop through to calculate OOS performance
+            # If holdout cols are provided, loop through to calculate OOS score
             for holdout in holdouts:
                 data_group = data.groupby(holdout)
                 self._cv_status[holdout] = self._fit(
@@ -163,26 +163,26 @@ class Learner:
                     **optimizer_options,
                 )
                 if self._cv_status[holdout] == ModelStatus.SUCCESS:
-                    self._cv_performances[holdout] = self.score(
+                    self._cv_scores[holdout] = self.evaluate(
                         data_group.get_group(1), self._cv_models[holdout]
                     )
-            performance = np.mean(
+            score = np.mean(
                 [
-                    performance
-                    for holdout, performance in self._cv_performances.items()
+                    score
+                    for holdout, score in self._cv_scores.items()
                     if self._cv_status[holdout] == ModelStatus.SUCCESS
                 ]
             )
 
-            # Learner performance is average performance across each k fold
-            self.performance = performance
+            # Learner score is average score across each k fold
+            self.score = score
 
         # Fit final model with all data included
         self.status = self._fit(data, **optimizer_options)
 
-        # If holdout cols not provided, use in sample score for the full data model
+        # If holdout cols not provided, use in sample evaluate for the full data model
         if not holdouts:
-            self.performance = self.score(data)
+            self.score = self.evaluate(data)
 
     def _fit(
         self,
@@ -222,19 +222,19 @@ class Learner:
         model.data.detach_df()
         return df_pred[col_pred].to_numpy()
 
-    def score(self, data: DataFrame, model: Optional[RegmodModel] = None) -> float:
+    def evaluate(self, data: DataFrame, model: Optional[RegmodModel] = None) -> float:
         """
-        Given a model and a test set, generate an aggregate score.
+        Given a model and a test set, generate an aggregate evaluate.
 
         Score is based on the provided evaluation metric, comparing the difference between
         observed and predicted values.
 
         :param test_set: The holdout test set to generate predictions from
         :param model: The fitted model to set predictions on
-        :return: a score determined by the provided model evaluation metric
+        :return: a evaluate determined by the provided model evaluation metric
         """
-        performance = self.model_eval_metric(
+        score = self.get_score(
             obs=data[self.obs].to_numpy(),
             pred=self.predict(data, model=model),
         )
-        return performance
+        return score

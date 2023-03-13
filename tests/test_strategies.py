@@ -8,14 +8,13 @@ from modrover.strategies.base import RoverStrategy
 
 
 class DummyModel(Learner):
-    """Mock the Model class for testing. Only need a performance attribute."""
+    """Mock the Model class for testing. Only need a score attribute."""
 
-    def __init__(self, performance: float = 1.0):
-        self.performance = performance
+    def __init__(self, score: float = 1.0):
+        self.score = score
 
 
 class DummyStrategy(RoverStrategy):
-
     @property
     def base_learner_id(self) -> LearnerID:
         return (0,)
@@ -28,7 +27,7 @@ class DummyStrategy(RoverStrategy):
 
 
 def test_basic_filtering():
-    """Test that we can select the best learner IDs based on past performance."""
+    """Test that we can select the best learner IDs based on past score."""
     num_covs = 5
 
     base_strategy = DummyStrategy(num_covs=num_covs)
@@ -36,22 +35,20 @@ def test_basic_filtering():
 
     # Test 1: select the n best learners
     base_perf = 0
-    delta = .2
-    performances = {}
+    delta = 0.2
+    scores = {}
     for lid in first_layer:
-        performances[lid] = DummyModel(base_perf)
+        scores[lid] = DummyModel(base_perf)
         base_perf += delta
 
     best = base_strategy._filter_curr_layer(
         curr_layer=set(first_layer),
-        learners=performances,
+        learners=scores,
     )
     assert best == {first_layer[-1]}
 
     best_two = base_strategy._filter_curr_layer(
-        curr_layer=set(first_layer),
-        learners=performances,
-        max_len=2
+        curr_layer=set(first_layer), learners=scores, max_len=2
     )
     assert best_two == set(first_layer[-2:])
 
@@ -64,12 +61,8 @@ def test_parent_ratio():
     lid_1 = (0, 1)
     lid_2 = (0, 2)
 
-    # Mock up some performances
-    learners = {
-        (0, 1, 2): DummyModel(7),
-        lid_1: DummyModel(5),
-        lid_2: DummyModel(10)
-    }
+    # Mock up some scores
+    learners = {(0, 1, 2): DummyModel(7), lid_1: DummyModel(5), lid_2: DummyModel(10)}
 
     upstreams = strategy._get_upstream_learner_ids(lid_1, learners).union(
         strategy._get_upstream_learner_ids(lid_2, learners)
@@ -77,32 +70,25 @@ def test_parent_ratio():
     for lid in upstreams:
         learners[lid] = DummyModel(7)
 
-    # LID 1 should have worse performance than its upstreams, so should not be explored further
-    # LID 2 has better performance than all parents, so we should be exploring further
+    # LID 1 should have worse score than its upstreams, so should not be explored further
+    # LID 2 has better score than all parents, so we should be exploring further
 
     new_lids = strategy._filter_curr_layer(
-        curr_layer={lid_1, lid_2},
-        learners=learners,
-        max_len=3,
-        min_improvement=1
+        curr_layer={lid_1, lid_2}, learners=learners, max_len=3, min_improvement=1
     )
     assert new_lids == {lid_2}
 
 
 def test_generate_forward_layer():
-
     strategy = ForwardExplore(4)
     lid_1 = (0, 1)
     lid_2 = (0, 2)
 
-    performances = {
-        lid_1: DummyModel(),
-        lid_2: DummyModel()
-    }
+    scores = {lid_1: DummyModel(), lid_2: DummyModel()}
 
     next_layer = strategy.get_next_layer(
         curr_layer={lid_1, lid_2},
-        learners=performances,
+        learners=scores,
         max_len=2,
     )
 
@@ -115,11 +101,8 @@ def test_generate_forward_layer():
 
     # Check terminal condition
     terminal_lid = (0, 1, 2, 3)
-    performances[terminal_lid] = DummyModel()
-    final_layer = strategy.get_next_layer(
-        {terminal_lid},
-        performances
-    )
+    scores[terminal_lid] = DummyModel()
+    final_layer = strategy.get_next_layer({terminal_lid}, scores)
     assert not final_layer
 
 
@@ -128,41 +111,28 @@ def test_generate_backward_layer():
     lid_1 = (0, 1)
     lid_2 = (0, 2)
 
-    performances = {
-        lid_1: DummyModel(),
-        lid_2: DummyModel()
-    }
+    scores = {lid_1: DummyModel(), lid_2: DummyModel()}
 
     next_layer = strategy.get_next_layer(
         curr_layer={lid_1, lid_2},
-        learners=performances,
+        learners=scores,
         max_len=2,
     )
 
-    expected_layer = {
-        (0,),
-        (1,),
-        (2,)
-    }
+    expected_layer = {(0,), (1,), (2,)}
     assert next_layer == expected_layer
 
     # Check terminal condition
     terminal_lid = tuple()
-    performances[terminal_lid] = DummyModel()
-    final_layer = strategy.get_next_layer(
-        {terminal_lid},
-        performances
-    )
+    scores[terminal_lid] = DummyModel()
+    final_layer = strategy.get_next_layer({terminal_lid}, scores)
     assert not final_layer
 
 
 def test_full_explore():
     full_strategy = FullExplore(3)
 
-    second_layer = full_strategy.get_next_layer(
-        full_strategy.first_layer,
-        dict()
-    )
+    second_layer = full_strategy.get_next_layer(full_strategy.first_layer, dict())
     expected_combos = {
         (0,),
         (1,),
@@ -176,10 +146,7 @@ def test_full_explore():
     assert second_layer == expected_learner_ids
 
     # Check that a second call results in an empty generator
-    empty_layer = full_strategy.get_next_layer(
-        second_layer,
-        dict()
-    )
+    empty_layer = full_strategy.get_next_layer(second_layer, dict())
     assert not empty_layer
 
 
@@ -189,10 +156,10 @@ def test_full_explore():
         # Duplicated ints
         ((0, 1, 2, 3, 3, 3), (0, 1, 2, 3), does_not_raise()),
         # Non ints
-        (('1', '2', '3'), (1, 2, 3), does_not_raise()),
+        (("1", "2", "3"), (1, 2, 3), does_not_raise()),
         # Negatives should fail
-        ((-1, 1, 3), None, pytest.raises(ValueError))
-    ]
+        ((-1, 1, 3), None, pytest.raises(ValueError)),
+    ],
 )
 def test_as_learner_id(input_cov_id, validated_cov_id, expectation):
     strategy = FullExplore(3)
