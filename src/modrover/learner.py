@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from enum import Enum
-from operator import attrgetter
 from typing import Callable, Optional
 
 import numpy as np
@@ -20,7 +19,8 @@ LearnerID = tuple[int, ...]
 class ModelStatus(Enum):
     SUCCESS = 0
     SINGULAR = 1
-    SOLVER_FAILED = 2
+    CV_FAILED = 2
+    SOLVER_FAILED = 3
     NOT_FITTED = -1
 
 
@@ -94,46 +94,12 @@ class Learner:
             raise ValueError("Provided vcov shape don't match")
         self.model.opt_vcov = vcov
 
-    @property
-    def df_coefs(self) -> Optional[DataFrame]:
-        if not self.coef:
-            return None
-        # TODO: Update this datastructure to be flexible with multiple parameters.
-        # Should reflect final all-data model, perhaps prefix with parameter name
-        # Is this full structure necessary? Or just the means?
-        data = DataFrame(
-            {
-                "cov_name": map(attrgetter("name"), self.model.params[0].variables),
-                "mean": self.coef,
-                "sd": np.sqrt(np.diag(self.vcov)),
-            }
-        )
-        return data
-
-    def _get_model(self) -> RegmodModel:
-        # TODO: this shouldn't be necessary in regmod v1.0.0
-        data = Data(
-            col_obs=self.obs,
-            col_offset=self.offset,
-            col_weights=self.weights,
-            subset_cols=False,
-        )
-
-        # Create regmod variables separately, by parameter
-        # Initialize with fixed parameters
-        model = self.model_class(
-            data=data,
-            param_specs=self.param_specs,
-        )
-        self.model = model
-        return model
-
     def fit(
         self,
         data: DataFrame,
         holdouts: Optional[list[str]] = None,
         **optimizer_options,
-    ):
+    ) -> None:
         """
         Fit a set of models on a series of holdout datasets.
 
@@ -166,16 +132,17 @@ class Learner:
                     self._cv_scores[holdout] = self.evaluate(
                         data_group.get_group(1), self._cv_models[holdout]
                     )
-            score = np.mean(
-                [
-                    score
-                    for holdout, score in self._cv_scores.items()
-                    if self._cv_status[holdout] == ModelStatus.SUCCESS
-                ]
-            )
+            cv_scores = [
+                score
+                for holdout, score in self._cv_scores.items()
+                if self._cv_status[holdout] == ModelStatus.SUCCESS
+            ]
+            if len(cv_scores) == 0:
+                self.status = ModelStatus.CV_FAILED
+                return
 
             # Learner score is average score across each k fold
-            self.score = score
+            self.score = np.mean(cv_scores)
 
         # Fit final model with all data included
         self.status = self._fit(data, **optimizer_options)
@@ -183,26 +150,6 @@ class Learner:
         # If holdout cols not provided, use in sample evaluate for the full data model
         if not holdouts:
             self.score = self.evaluate(data)
-
-    def _fit(
-        self,
-        data: DataFrame,
-        model: Optional[RegmodModel] = None,
-        **optimizer_options,
-    ) -> ModelStatus:
-        model = model or self.model
-        model.attach_df(data)
-        mat = model.mat[0]
-        if np.linalg.matrix_rank(mat) < mat.shape[1]:
-            return ModelStatus.SINGULAR
-
-        try:
-            model.fit(**optimizer_options)
-        except:
-            return ModelStatus.SOLVER_FAILED
-
-        model.data.detach_df()
-        return ModelStatus.SUCCESS
 
     def predict(self, data: DataFrame, model: Optional[RegmodModel] = None) -> NDArray:
         """
@@ -238,3 +185,41 @@ class Learner:
             pred=self.predict(data, model=model),
         )
         return score
+
+    def _get_model(self) -> RegmodModel:
+        # TODO: this shouldn't be necessary in regmod v1.0.0
+        data = Data(
+            col_obs=self.obs,
+            col_offset=self.offset,
+            col_weights=self.weights,
+            subset_cols=False,
+        )
+
+        # Create regmod variables separately, by parameter
+        # Initialize with fixed parameters
+        model = self.model_class(
+            data=data,
+            param_specs=self.param_specs,
+        )
+        self.model = model
+        return model
+
+    def _fit(
+        self,
+        data: DataFrame,
+        model: Optional[RegmodModel] = None,
+        **optimizer_options,
+    ) -> ModelStatus:
+        model = model or self.model
+        model.attach_df(data)
+        mat = model.mat[0]
+        if np.linalg.matrix_rank(mat) < mat.shape[1]:
+            return ModelStatus.SINGULAR
+
+        try:
+            model.fit(**optimizer_options)
+        except:
+            return ModelStatus.SOLVER_FAILED
+
+        model.data.detach_df()
+        return ModelStatus.SUCCESS
