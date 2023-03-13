@@ -12,9 +12,10 @@ class MockLearner(Learner):
 
     def __init__(self, coefficients: np.ndarray, performance: float):
         self.performance = performance
-        self._model = (
+        self.model = (
             lambda: None
         )  # arbitrary mutable object that we can assign weights to
+        self.model.size = len(coefficients)
 
         self.coef = coefficients
 

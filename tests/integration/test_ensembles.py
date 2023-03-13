@@ -123,7 +123,7 @@ def test_get_super_coef(mock_rover):
 def test_get_super_learner(mock_rover):
     """Test that we can create a super learner object from rover after fitting."""
     mock_rover._get_learner = lambda learner_id, use_cache: Learner(
-        model_type=model_type_dict["gaussian"],
+        model_class=model_type_dict["gaussian"],
         obs="y",
         param_specs={"mu": {"variables": list(range(5))}},
     )

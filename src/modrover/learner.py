@@ -17,69 +17,72 @@ LearnerID = tuple[int, ...]
 
 
 class Learner:
+    """Main model class for Rover explore.
+
+    Parameters
+    ----------
+    model_class
+        Regmod model constructor
+    obs
+        Name corresponding to the observation column in the data frame
+    param_specs
+        Parameter settings for the regmod model
+    offset
+        Name corresponding to the offset column in the data frame
+    weights
+        Name corresponding to the weights column in the data frame
+    model_eval_metric
+        Function that evaluate the performance of of the model
+
+    """
+
     def __init__(
         self,
-        model_type: type,
+        model_class: type,
         obs: str,
         param_specs: dict[str, dict],
         offset: str = "offset",
         weights: str = "weights",
         model_eval_metric: Callable = get_rmse,
     ) -> None:
-        """
-        Initialize a Rover submodel
-
-        :param model_type: str, represents what type of model, e.g. gaussian, tobit, etc.
-        :param col_obs: str, which column is the target column to predict out
-        :param col_covs: list[str], all possible columns that rover can explore over
-        :param col_offset:
-        :param col_weights:
-        :param model_param_name:
-        :param model_eval_metric:
-        :param optimizer_options:
-        """
-        self.model_type = model_type
-
-        # TODO: Should these be parameters to fit, or instance attributes?
+        self.model_class = model_class
         self.obs = obs
-        # TODO: offset will be gone in the regmod v1.0.0
         self.offset = offset
         self.weights = weights
         self.model_eval_metric = model_eval_metric
 
-        # Initialize null model
-        self._model: Optional[RegmodModel] = None
-        self.performance: Optional[float] = None
-
         # convert str to Variable
-        # TODO: this won't be necessary in regmod v1.0.0
         for param_spec in param_specs.values():
             param_spec["variables"] = list(map(Variable, param_spec["variables"]))
         self.param_specs = param_specs
 
+        # initialize null model
+        self.model = self._get_model()
+        self.performance: Optional[float] = None
+
+        # initialize cross validation model
+        self._cv_models = {}
+        self._cv_performances = {}
+
     @property
     def coef(self) -> Optional[NDArray]:
-        if self._model:
-            return self._model.opt_coefs
-        return None
+        return self.model.opt_coefs
 
     @coef.setter
     def coef(self, coef: NDArray):
-        if not self._model:
-            self._model = self._initialize_model()
-        self._model.opt_coefs = coef
+        if len(coef) != self.model.size:
+            raise ValueError("Provided coef size don't match")
+        self.model.opt_coefs = coef
 
     @property
     def vcov(self) -> Optional[NDArray]:
-        if self._model:
-            return self._model.opt_vcov
-        return None
+        return self.model.opt_vcov
 
     @vcov.setter
     def vcov(self, vcov: NDArray):
-        if not self._model:
-            self._model = self._initialize_model()
-        self._model.opt_vcov = vcov
+        if vcov.shape != (self.model.size, self.model.size):
+            raise ValueError("Provided vcov shape don't match")
+        self.model.opt_vcov = vcov
 
     @property
     def has_been_fit(self) -> bool:
@@ -97,18 +100,14 @@ class Learner:
         # Is this full structure necessary? Or just the means?
         data = DataFrame(
             {
-                "cov_name": map(attrgetter("name"), self._model.params[0].variables),
+                "cov_name": map(attrgetter("name"), self.model.params[0].variables),
                 "mean": self.coef,
                 "sd": np.sqrt(np.diag(self.vcov)),
             }
         )
         return data
 
-    def _initialize_model(self) -> RegmodModel:
-        """
-        Initialize a regmod model based on the provided modelspecs.
-        """
-
+    def _get_model(self) -> RegmodModel:
         # TODO: this shouldn't be necessary in regmod v1.0.0
         data = Data(
             col_obs=self.obs,
@@ -119,11 +118,11 @@ class Learner:
 
         # Create regmod variables separately, by parameter
         # Initialize with fixed parameters
-        model = self.model_type(
+        model = self.model_class(
             data=data,
             param_specs=self.param_specs,
         )
-        self._model = model
+        self.model = model
         return model
 
     def fit(
@@ -150,41 +149,50 @@ class Learner:
         :return:
         """
         if self.performance:
-            # Learner already has been fit, exit early
             return
         if holdouts:
             # If holdout cols are provided, loop through to calculate OOS performance
             performance = 0.0
-            for col in holdouts:
-                model = self._initialize_model()
-                # Subset the data
-                train_set = data.loc[data[col] == 0]
-                test_set = data.loc[data[col] == 1]
-                self._fit(model, train_set, **optimizer_options)
-                performance += self.score(test_set, model)
+            for holdout in holdouts:
+                data_group = data.groupby(holdout)
+                model = self._fit(
+                    data_group.get_group(0),
+                    self._get_model(),
+                    **optimizer_options,
+                )
+                performance = self.score(data_group.get_group(1), model)
+                self._cv_performances[holdout] = performance
+                self._cv_models[holdout] = model
             performance /= len(holdouts)  # Divide by k to get an unweighted average
 
             # Learner performance is average performance across each k fold
             self.performance = performance
 
         # Fit final model with all data included
-        self._model = self._initialize_model()
-        self._fit(self._model, data, **optimizer_options)
+        self._fit(data, **optimizer_options)
 
         # If holdout cols not provided, use in sample score for the full data model
         if not holdouts:
-            self.performance = self.score(data, self._model)
+            self.performance = self.score(self.model, data)
 
-    def _fit(self, model: RegmodModel, data: DataFrame, **optimizer_options) -> None:
+    def _fit(
+        self,
+        data: DataFrame,
+        model: Optional[RegmodModel] = None,
+        **optimizer_options,
+    ) -> RegmodModel:
+        model = model or self.model
         model.attach_df(data)
         mat = model.mat[0]
         if np.linalg.matrix_rank(mat) < mat.shape[1]:
             warn(f"Singular design matrix")
-            return
+            return model
 
         model.fit(**optimizer_options)
+        model.data.detach_df()
+        return model
 
-    def predict(self, model: RegmodModel, test_set: DataFrame) -> NDArray:
+    def predict(self, data: DataFrame, model: Optional[RegmodModel] = None) -> NDArray:
         """
         Wraps regmod's predict method to avoid modifying input dataset.
 
@@ -196,13 +204,13 @@ class Learner:
         :param param_name: a string representing the parameter we are predicting out on
         :return: an array of predictions for the model parameter of interest
         """
-        df_pred = model.predict(test_set)
+        model = model or self.model
+        df_pred = model.predict(data)
         col_pred = model.param_names[0]
-        # TODO: in regmod v1.0.0, we should have a col called "pred_obs"
-        # col_pred = "pred_obs"
+        model.data.detach_df()
         return df_pred[col_pred].to_numpy()
 
-    def score(self, test_set: DataFrame, model: Optional[RegmodModel] = None) -> float:
+    def score(self, data: DataFrame, model: Optional[RegmodModel] = None) -> float:
         """
         Given a model and a test set, generate an aggregate score.
 
@@ -213,17 +221,8 @@ class Learner:
         :param model: The fitted model to set predictions on
         :return: a score determined by the provided model evaluation metric
         """
-
-        if model is None:
-            model = self._model
-
-        preds = self.predict(model, test_set)
-        observed = test_set[self.obs]
         performance = self.model_eval_metric(
-            obs=observed.array,
-            pred=preds,
+            obs=data[self.obs].to_numpy(),
+            pred=self.predict(data, model=model),
         )
-        # Clear out attached dataframe from the model object
-        model.data.detach_df()
-
         return performance
