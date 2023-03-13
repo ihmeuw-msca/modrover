@@ -3,7 +3,7 @@ from typing import Optional
 import numpy as np
 import pytest
 
-from modrover.learner import Learner, LearnerID
+from modrover.learner import Learner, LearnerID, ModelStatus
 from modrover.rover import Rover
 
 
@@ -18,6 +18,7 @@ class MockLearner(Learner):
         self.model.size = len(coefficients)
 
         self.coef = coefficients
+        self.status = ModelStatus.SUCCESS
 
 
 class MockRover(Rover):

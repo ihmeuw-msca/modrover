@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from modrover.globals import model_type_dict
-from modrover.learner import Learner
+from modrover.learner import Learner, ModelStatus
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ def test_model_init(model_specs):
     # In param_specs, we'll select the intercept term plus 3/5 covariates
     learner = Learner(**model_specs)
     # Check that model is "new"
-    assert not learner.has_been_fit
+    assert learner.status == ModelStatus.NOT_FITTED
     assert learner.coef is None
     assert learner.performance is None
 

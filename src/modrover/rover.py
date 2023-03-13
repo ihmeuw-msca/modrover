@@ -7,7 +7,7 @@ from pandas import DataFrame
 
 from .exceptions import InvalidConfigurationError, NotFittedError
 from .globals import get_rmse, model_type_dict
-from .learner import Learner, LearnerID
+from .learner import Learner, LearnerID, ModelStatus
 from .strategies import get_strategy
 from .strategies.base import RoverStrategy
 from .synthesizer import metrics_to_weights
@@ -217,7 +217,7 @@ class Rover:
         while curr_ids:
             for learner_id in curr_ids:
                 learner = self._get_learner(learner_id)
-                if not learner.has_been_fit:
+                if learner.status == ModelStatus.NOT_FITTED:
                     learner.fit(dataset, self.holdouts)
                     self.learners[learner_id] = learner
 
@@ -295,7 +295,7 @@ class Rover:
         learner_ids = [
             learner_id
             for learner_id, learner in self.learners.items()
-            if learner.has_been_fit
+            if learner.status == ModelStatus.SUCCESS
         ]
 
         # collect the coefficients from all models

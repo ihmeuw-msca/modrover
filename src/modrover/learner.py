@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections import defaultdict
+from enum import Enum
 from operator import attrgetter
 from typing import Callable, Optional
-from warnings import warn
 
 import numpy as np
 from numpy.typing import NDArray
@@ -14,6 +15,13 @@ from regmod.variable import Variable
 from .globals import get_rmse
 
 LearnerID = tuple[int, ...]
+
+
+class ModelStatus(Enum):
+    SUCCESS = 0
+    SINGULAR = 1
+    SOLVER_FAILED = 2
+    NOT_FITTED = -1
 
 
 class Learner:
@@ -59,10 +67,12 @@ class Learner:
         # initialize null model
         self.model = self._get_model()
         self.performance: Optional[float] = None
+        self.status = ModelStatus.NOT_FITTED
 
         # initialize cross validation model
-        self._cv_models = {}
-        self._cv_performances = {}
+        self._cv_models = defaultdict(self._get_model)
+        self._cv_performances = defaultdict(lambda: None)
+        self._cv_status = defaultdict(lambda: ModelStatus.NOT_FITTED)
 
     @property
     def coef(self) -> Optional[NDArray]:
@@ -83,13 +93,6 @@ class Learner:
         if vcov.shape != (self.model.size, self.model.size):
             raise ValueError("Provided vcov shape don't match")
         self.model.opt_vcov = vcov
-
-    @property
-    def has_been_fit(self) -> bool:
-        """
-        Check if our fit method has been called, by checking whether the model is null.
-        """
-        return self.coef is not None
 
     @property
     def df_coefs(self) -> Optional[DataFrame]:
@@ -152,45 +155,54 @@ class Learner:
             return
         if holdouts:
             # If holdout cols are provided, loop through to calculate OOS performance
-            performance = 0.0
             for holdout in holdouts:
                 data_group = data.groupby(holdout)
-                model = self._fit(
+                self._cv_status[holdout] = self._fit(
                     data_group.get_group(0),
-                    self._get_model(),
+                    self._cv_models[holdout],
                     **optimizer_options,
                 )
-                performance = self.score(data_group.get_group(1), model)
-                self._cv_performances[holdout] = performance
-                self._cv_models[holdout] = model
-            performance /= len(holdouts)  # Divide by k to get an unweighted average
+                if self._cv_status[holdout] == ModelStatus.SUCCESS:
+                    self._cv_performances[holdout] = self.score(
+                        data_group.get_group(1), self._cv_models[holdout]
+                    )
+            performance = np.mean(
+                [
+                    performance
+                    for holdout, performance in self._cv_performances.items()
+                    if self._cv_status[holdout] == ModelStatus.SUCCESS
+                ]
+            )
 
             # Learner performance is average performance across each k fold
             self.performance = performance
 
         # Fit final model with all data included
-        self._fit(data, **optimizer_options)
+        self.status = self._fit(data, **optimizer_options)
 
         # If holdout cols not provided, use in sample score for the full data model
         if not holdouts:
-            self.performance = self.score(self.model, data)
+            self.performance = self.score(data)
 
     def _fit(
         self,
         data: DataFrame,
         model: Optional[RegmodModel] = None,
         **optimizer_options,
-    ) -> RegmodModel:
+    ) -> ModelStatus:
         model = model or self.model
         model.attach_df(data)
         mat = model.mat[0]
         if np.linalg.matrix_rank(mat) < mat.shape[1]:
-            warn(f"Singular design matrix")
-            return model
+            return ModelStatus.SINGULAR
 
-        model.fit(**optimizer_options)
+        try:
+            model.fit(**optimizer_options)
+        except:
+            return ModelStatus.SOLVER_FAILED
+
         model.data.detach_df()
-        return model
+        return ModelStatus.SUCCESS
 
     def predict(self, data: DataFrame, model: Optional[RegmodModel] = None) -> NDArray:
         """
