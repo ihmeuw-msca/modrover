@@ -9,8 +9,6 @@ from .exceptions import InvalidConfigurationError, NotFittedError
 from .globals import get_rmse, model_type_dict
 from .learner import Learner, LearnerID, ModelStatus
 from .strategies import get_strategy
-from .strategies.base import RoverStrategy
-from .synthesizer import metrics_to_weights
 
 
 class Rover:
@@ -85,30 +83,37 @@ class Rover:
 
     def fit(
         self,
-        dataset: DataFrame,
-        strategy: Union[str, RoverStrategy],
+        data: DataFrame,
+        strategy: str,
         max_num_models: int = 10,
         kernel_param: float = 10.0,
         ratio_cutoff: float = 0.99,
     ) -> None:
+        """Fits the ensembled super learner.
+
+        Explores over all covariate slices as defined by the input strategy, and
+        fits the sublearners.
+
+        The superlearner coefficients are determined by the ensemble method
+        parameters, and the super learner itself will be created - to be used in
+        prediction and summarization.
+
+        Parameters
+        ----------
+        data
+            Training data to fit individual learners on
+        strategy
+            The selection strategy to determine the model tree
+        max_num_models
+            The maximum number of models to consider for ensembling
+        kernel_param
+            The kernel parameter used to determine bias in ensemble weights
+        ratio_cutoff
+            The cross-validated score score necessary for a learner to be
+            considered in ensembling
+
         """
-        Fits the ensembled super learner.
-
-        Explores over all covariate slices as defined by the input strategy, and fits the
-        sublearners.
-
-        The superlearner coefficients are determined by the ensemble method parameters, and the
-        super learner itself will be created - to be used in prediction and summarization.
-
-        :param dataset: the dataset to fit individual learners on
-        :param strategy: the selection strategy to determine the model tree
-        :param max_num_models: the maximum number of models to consider for ensembling
-        :param kernel_param: the kernel parameter used to determine bias in ensemble weights
-        :param ratio_cutoff: the cross-validated score score necessary for a learner to
-            be considered in ensembling
-        :return: None
-        """
-        self._explore(dataset=dataset, strategy=strategy)
+        self._explore(data=data, strategy=strategy)
         super_learner = self._get_super_learner(
             max_num_models=max_num_models,
             kernel_param=kernel_param,
@@ -116,8 +121,21 @@ class Rover:
         )
         self._super_learner = super_learner
 
-    def predict(self, dataset):
-        return self.super_learner.predict(dataset)
+    def predict(self, data: DataFrame) -> NDArray:
+        """Predict with ensembled super learner.
+
+        Parameters
+        ----------
+        data
+            Testing data to predict
+
+        Returns
+        -------
+        NDArray
+            Super learner predictions
+
+        """
+        return self.super_learner.predict(data)
 
     def summary(self):
         NotImplemented
@@ -197,7 +215,7 @@ class Rover:
         )
 
     # explore ==================================================================
-    def _explore(self, dataset: DataFrame, strategy: Union[str, RoverStrategy]):
+    def _explore(self, data: DataFrame, strategy: str):
         """Explore the entire tree of learners.
 
         Params:
@@ -205,12 +223,7 @@ class Rover:
         strategy: a string or a roverstrategy object. Dictates how the next set of models
             is selected
         """
-        if isinstance(strategy, str):
-            # If a string is provided, select a strategy for the user.
-            strategy_class = get_strategy(strategy)
-            strategy = strategy_class(
-                num_covs=len(self.cov_exploring),
-            )
+        strategy = get_strategy(strategy)(num_covs=len(self.cov_exploring))
 
         curr_ids = {strategy.base_learner_id}
 
@@ -218,7 +231,7 @@ class Rover:
             for learner_id in curr_ids:
                 learner = self._get_learner(learner_id)
                 if learner.status == ModelStatus.NOT_FITTED:
-                    learner.fit(dataset, self.holdouts)
+                    learner.fit(data, self.holdouts)
                     self.learners[learner_id] = learner
 
             next_ids = strategy.get_next_layer(
@@ -270,7 +283,7 @@ class Rover:
 
         # Create weights
         scores = np.array([self.learners[key].score for key in learner_ids])
-        weights = metrics_to_weights(
+        weights = scores_to_weights(
             metrics=scores,
             max_num_models=max_num_models,
             kernel_param=kernel_param,
@@ -319,3 +332,27 @@ class Rover:
                 coef_index.extend([i + pointer for i in learner_id])
                 pointer += len(self.cov_exploring)
         return coef_index
+
+
+def scores_to_weights(
+    metrics: NDArray,
+    max_num_models: int,
+    kernel_param: float,
+    ratio_cutoff: float,
+) -> NDArray:
+    # Drop performances that aren't in the top n or don't meet a threshold
+    # from being assigned weights
+    sort_indices = np.argsort(metrics)[::-1]
+    indices = metrics >= metrics.max() * ratio_cutoff
+    indices[sort_indices[max_num_models:]] = False
+
+    # Initialize weights vector
+    weights = np.zeros(metrics.size)
+    metrics = metrics[indices]
+
+    metrics = metrics / metrics.max()
+    # Apply exponential transform to selected performances
+    metrics = np.exp(kernel_param * metrics)
+    # Final weights should all sum to 1
+    weights[indices] = metrics / metrics.sum()
+    return weights

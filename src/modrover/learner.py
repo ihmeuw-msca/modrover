@@ -103,19 +103,26 @@ class Learner:
         """
         Fit a set of models on a series of holdout datasets.
 
-        This method will fit a model over k folds of the dataset, where k is the length
-        of the provided holdouts list. It is up to the user to decide the train-test
-        splits for each holdout column.
+        This method will fit a model over k folds of the dataset, where k is the
+        length of the provided holdouts list. It is up to the user to decide the
+        train-test splits for each holdout column.
 
-        On each fold of the dataset, the trained model will predict out on the validation set
-        and obtain a evaluate. The averaged evaluate across all folds becomes the model's overall
-        score.
+        On each fold of the dataset, the trained model will predict out on the
+        validation set and obtain a evaluate. The averaged evaluate across all
+        folds becomes the model's overall score.
 
-        Finally, a model is trained with all data in order to generate the final coefficients.
+        Finally, a model is trained with all data in order to generate the final
+        coefficients.
 
-        :param data: a dataframe containing the training data
-        :param holdouts: which column names to iterate over for cross validation
-        :return:
+        Parameters
+        ----------
+        data
+            A dataframe containing the training data
+        holdouts
+            Which column names to iterate over for cross validation. If it is
+            `None`, insample performance score will be used to evaluate the
+            model.
+
         """
         if self.status != ModelStatus.NOT_FITTED:
             return
@@ -152,16 +159,24 @@ class Learner:
             self.score = self.evaluate(data)
 
     def predict(self, data: DataFrame, model: Optional[RegmodModel] = None) -> NDArray:
-        """
-        Wraps regmod's predict method to avoid modifying input dataset.
+        """Wraps regmod's predict method to avoid modifying input dataset.
 
-        Can be removed if regmod models use a functionally pure predict function, otherwise
-        we will raise SettingWithCopyWarnings repeatedly.
+        Can be removed if regmod models use a functionally pure predict
+        function, otherwise we will raise SettingWithCopyWarnings repeatedly.
 
-        :param model: a fitted RegmodModel
-        :param test_set: a dataset to generate predictions from
-        :param param_name: a string representing the parameter we are predicting out on
-        :return: an array of predictions for the model parameter of interest
+        Parameters
+        ----------
+        data
+            A dataset to generate predictions from
+        model
+            A fitted RegmodModel. If it is `None`, will use the overall model
+            rather than the cross-validation model.
+
+        Returns
+        -------
+        NDArray
+            Prediction with the model.
+
         """
         model = model or self.model
         df_pred = model.predict(data)
@@ -170,15 +185,24 @@ class Learner:
         return df_pred[col_pred].to_numpy()
 
     def evaluate(self, data: DataFrame, model: Optional[RegmodModel] = None) -> float:
-        """
-        Given a model and a test set, generate an aggregate evaluate.
+        """Given a model and a test set, generate an aggregate evaluate.
 
-        Score is based on the provided evaluation metric, comparing the difference between
-        observed and predicted values.
+        Score is based on the provided evaluation metric, comparing the
+        difference between observed and predicted values.
 
-        :param test_set: The holdout test set to generate predictions from
-        :param model: The fitted model to set predictions on
-        :return: a evaluate determined by the provided model evaluation metric
+        Parameters
+        ----------
+        data
+            The data set to generate predictions from
+        model
+            The fitted model to set predictions on. If `None` will use the
+            overall model rather than the cross-validation model.
+
+        Returns
+        -------
+        float
+            A evaluate determined by the provided model evaluation metric.
+
         """
         score = self.get_score(
             obs=data[self.obs].to_numpy(),

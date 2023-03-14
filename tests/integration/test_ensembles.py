@@ -3,7 +3,7 @@ import pytest
 
 from modrover.globals import model_type_dict
 from modrover.learner import Learner
-from modrover.synthesizer import metrics_to_weights
+from modrover.rover import scores_to_weights
 
 
 @pytest.mark.parametrize(
@@ -30,7 +30,7 @@ from modrover.synthesizer import metrics_to_weights
     ],
 )
 def test_create_weights(metrics, num_models, kernel_param, ratio_cutoff, expectation):
-    weights = metrics_to_weights(metrics, num_models, kernel_param, ratio_cutoff)
+    weights = scores_to_weights(metrics, num_models, kernel_param, ratio_cutoff)
     assert np.allclose(weights, expectation, atol=0.01)
     assert np.isclose(weights.sum(), 1)
 

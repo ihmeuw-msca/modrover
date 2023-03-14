@@ -14,7 +14,7 @@ if __name__ == "__main__":
         long_description = f.read()
 
     install_requirements = [
-        "regmod==0.0.8",
+        "regmod==0.1.0",
         "pplkit",
     ]
     test_requirements = [
@@ -37,14 +37,14 @@ if __name__ == "__main__":
         author_email=about["__email__"],
         package_dir={"": "src"},
         packages=find_packages(where="src"),
-        python_requires='>=3.10',
+        python_requires=">=3.10",
         include_package_data=True,
         install_requires=install_requirements,
         tests_require=test_requirements,
         extras_require={
             "docs": doc_requirements,
             "test": test_requirements,
-            "dev": doc_requirements + test_requirements
+            "dev": doc_requirements + test_requirements,
         },
         zip_safe=False,
     )

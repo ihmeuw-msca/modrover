@@ -20,7 +20,7 @@ def test_rover():
         cov_exploring=["var_a", "var_b"],
         holdouts=["holdout"],
     )
-    rover.fit(dataset=dataframe, strategy="full", ratio_cutoff=0.0)
+    rover.fit(data=dataframe, strategy="full", ratio_cutoff=0.0)
     assert set(rover.learners.keys()) == {tuple(), (0,), (1,), (0, 1)}
     assert isinstance(rover.super_learner, Learner)
 
@@ -43,7 +43,7 @@ def test_two_parameter_rover():
         holdouts=["holdout"],
     )
 
-    rover.fit(dataset=dataframe, strategy="backward", ratio_cutoff=0.0)
+    rover.fit(data=dataframe, strategy="backward", ratio_cutoff=0.0)
     assert set(rover.learners.keys()) == {tuple(), (0,), (1,), (0, 1)}
     # Should have 6 coefficients:
     #   mu - intercept, a, c, d
