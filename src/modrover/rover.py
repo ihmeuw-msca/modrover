@@ -264,8 +264,8 @@ class Rover:
             kernel_param=kernel_param,
             ratio_cutoff=ratio_cutoff,
         )
-        master_learner_id = tuple(range(len(self.cov_exploring)))
-        learner = self._get_learner(learner_id=master_learner_id, use_cache=False)
+        super_learner_id = tuple(range(len(self.cov_exploring)))
+        learner = self._get_learner(learner_id=super_learner_id, use_cache=False)
         learner.coef = means
         return learner
 
