@@ -108,9 +108,12 @@ class Rover:
             The maximum number of models to consider for ensembling
         kernel_param
             The kernel parameter used to determine bias in ensemble weights
-        ratio_cutoff
-            The cross-validated score score necessary for a learner to be
-            considered in ensembling
+        top_pct_score
+            Only the learners with score that are greater or equal than
+            `best_score * (1 - top_score)` can be selected. When `top_score = 0`
+            only the best model will be selected.
+        top_pct_learner
+            Only the best `top_pct_learner * num_learners` will be selected.
 
         """
         self._explore(
@@ -222,13 +225,7 @@ class Rover:
         strategies: list[str],
         strategy_options: Optional[dict] = None,
     ):
-        """Explore the entire tree of learners.
-
-        Params:
-        dataset: The dataset to fit models on
-        strategy: a string or a roverstrategy object. Dictates how the next set of models
-            is selected
-        """
+        """Explore the entire tree of learners"""
         strategy_options = strategy_options or {}
         strategy_options = {
             strategy: strategy_options.get(strategy, {}) for strategy in strategies
@@ -270,16 +267,9 @@ class Rover:
         top_pct_score: float,
         top_pct_learner: float,
     ) -> NDArray:
-        """
-        Generates the weighted ensembled coefficients across all fitted learners.
+        """Generates the weighted ensembled coefficients across all fitted
+        learners.
 
-        :param max_num_models: The maximum number of learners to consider for our weights
-        :param kernel_param: The kernel parameter, amount with which to bias towards strongest
-            scores
-        :param ratio_cutoff: The score floor which learners must exceed to be considered
-            in the ensemble weights
-        :return: A vector of weighted coefficients aggregated from sufficiently-performing
-            sublearners.
         """
 
         # Validate the parameters
@@ -308,15 +298,15 @@ class Rover:
         return super_coef
 
     def _get_coef_mat(self) -> tuple[list[LearnerID], NDArray]:
-        """Create the full matrix of learner ids, mapped to its relative coefficients.
+        """Create the full matrix of learner ids, mapped to its relative
+        coefficients.
 
-        Will result in a m x n matrix, where m = the number of fitted learners in rover
-        and n is the total number of covariates provided.
+        Will result in a m x n matrix, where m = the number of fitted learners
+        in rover and n is the total number of covariates provided.
 
-        Each cell is the i-th learner's coefficient for the j-th covariate, defaulting to 0
-        if the coefficient is not represented in that learner.
+        Each cell is the i-th learner's coefficient for the j-th covariate,
+        defaulting to 0 if the coefficient is not represented in that learner.
 
-        :return:
         """
         learner_ids = [
             learner_id
