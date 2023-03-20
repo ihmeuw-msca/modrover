@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Callable, Optional, Union
+from typing import Callable, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -84,7 +84,8 @@ class Rover:
     def fit(
         self,
         data: DataFrame,
-        strategy: str,
+        strategies: list[str],
+        strategy_options: Optional[dict] = None,
         max_num_models: int = 10,
         kernel_param: float = 10.0,
         ratio_cutoff: float = 0.99,
@@ -113,7 +114,9 @@ class Rover:
             considered in ensembling
 
         """
-        self._explore(data=data, strategy=strategy)
+        self._explore(
+            data=data, strategies=strategies, strategy_options=strategy_options
+        )
         super_learner = self._get_super_learner(
             max_num_models=max_num_models,
             kernel_param=kernel_param,
@@ -215,7 +218,12 @@ class Rover:
         )
 
     # explore ==================================================================
-    def _explore(self, data: DataFrame, strategy: str):
+    def _explore(
+        self,
+        data: DataFrame,
+        strategies: list[str],
+        strategy_options: Optional[dict] = None,
+    ):
         """Explore the entire tree of learners.
 
         Params:
@@ -223,21 +231,28 @@ class Rover:
         strategy: a string or a roverstrategy object. Dictates how the next set of models
             is selected
         """
-        strategy = get_strategy(strategy)(num_covs=len(self.cov_exploring))
+        strategy_options = strategy_options or {}
+        strategy_options = {
+            strategy: strategy_options.get(strategy, {}) for strategy in strategies
+        }
 
-        curr_ids = {strategy.base_learner_id}
+        for strategy in strategies:
+            options = strategy_options[strategy]
+            strategy = get_strategy(strategy)(num_covs=len(self.cov_exploring))
+            curr_ids = {strategy.base_learner_id}
+            while curr_ids:
+                for learner_id in curr_ids:
+                    learner = self._get_learner(learner_id)
+                    if learner.status == ModelStatus.NOT_FITTED:
+                        learner.fit(data, self.holdouts)
+                        self.learners[learner_id] = learner
 
-        while curr_ids:
-            for learner_id in curr_ids:
-                learner = self._get_learner(learner_id)
-                if learner.status == ModelStatus.NOT_FITTED:
-                    learner.fit(data, self.holdouts)
-                    self.learners[learner_id] = learner
-
-            next_ids = strategy.get_next_layer(
-                curr_layer=curr_ids, learners=self.learners
-            )
-            curr_ids = next_ids
+                next_ids = strategy.get_next_layer(
+                    curr_layer=curr_ids,
+                    learners=self.learners,
+                    **options,
+                )
+                curr_ids = next_ids
 
     # construct super learner ===================================================
     def _get_super_learner(
