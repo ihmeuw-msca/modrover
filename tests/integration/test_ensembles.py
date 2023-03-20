@@ -1,36 +1,28 @@
 import numpy as np
 import pytest
-
 from modrover.globals import model_type_dict
 from modrover.learner import Learner
-from modrover.rover import scores_to_weights
 
 
 @pytest.mark.parametrize(
-    "metrics,num_models,kernel_param,ratio_cutoff,expectation",
+    "scores,top_pct_scores,top_pct_learners,expectation",
     [
         # Selecting a high cutoff means only 1 value selected
-        (np.array([1, 0.5, 0]), 10, 1, 0.99, np.array([1, 0, 0])),
+        (np.array([1, 0.5, 0]), 0.1, 1, np.array([1, 0, 0])),
         # Two values should be selected with same max value, equal weights
-        (np.array([1, 0.5, 1]), 10, 1, 0.99, np.array([0.5, 0, 0.5])),
+        (np.array([1, 0.5, 1]), 0.1, 1, np.array([0.5, 0, 0.5])),
         # Lowering the threshold should return two values with unequal weights
-        (np.array([1, 0.8, 0]), 10, 1, 0.7, np.array([0.55, 0.45, 0])),
+        (np.array([1, 0.5, 0]), 0.5, 1, np.array([0.67, 0.33, 0])),
         # Increasing the kernel parameter should bias towards the better scores
-        (np.array([1, 0.8, 0]), 10, 10, 0.7, np.array([0.88, 0.12, 0])),
+        (np.array([1, 0.5, 0]), 1, 0.1, np.array([1, 0, 0])),
         # Lowering the num_models param should only return a max number of non zero weights
-        (np.array([1, 0.8, 0]), 1, 1, 0.7, np.array([1, 0, 0])),
-        # Negative values for scores handled gracefully
-        (
-            np.array([-0.5, -0.3, 0.2, 0.4]),
-            10,
-            1,
-            -100,
-            np.array([0.06, 0.09, 0.32, 0.53]),
-        ),
+        (np.array([1, 0.5, 0]), 1, 0.7, np.array([0.67, 0.33, 0])),
     ],
 )
-def test_create_weights(metrics, num_models, kernel_param, ratio_cutoff, expectation):
-    weights = scores_to_weights(metrics, num_models, kernel_param, ratio_cutoff)
+def test_create_weights(
+    mock_rover, scores, top_pct_scores, top_pct_learners, expectation
+):
+    weights = mock_rover._get_super_weights(scores, top_pct_scores, top_pct_learners)
     assert np.allclose(weights, expectation, atol=0.01)
     assert np.isclose(weights.sum(), 1)
 
@@ -92,7 +84,7 @@ def test_get_super_coef(mock_rover):
     """
 
     single_model_coeffs = mock_rover._get_super_coef(
-        max_num_models=10, kernel_param=10, ratio_cutoff=0.99
+        top_pct_score=0.01, top_pct_learner=1
     )
     # With high cutoff, only single model is selected. Coefficients same as that single model
     best_learner_id = (1, 3)
@@ -104,15 +96,13 @@ def test_get_super_coef(mock_rover):
 
     # Same with low max_num_models to consider
     lone_max_model_coeffs = mock_rover._get_super_coef(
-        max_num_models=1, kernel_param=10, ratio_cutoff=0.99
+        top_pct_score=0.01, top_pct_learner=1
     )
     assert np.allclose(lone_max_model_coeffs, single_model_coeffs)
 
     # Check that if all models considered, we'll be bound by the max/min of the individual
     # learners' coefficients
-    all_models_means = mock_rover._get_super_coef(
-        max_num_models=10, kernel_param=10, ratio_cutoff=-10
-    )
+    all_models_means = mock_rover._get_super_coef(top_pct_score=1, top_pct_learner=1)
     _, all_coeffs = mock_rover._get_coef_mat()
     assert np.all(all_models_means <= all_coeffs.max(axis=0))
     assert np.all(all_models_means >= all_coeffs.min(axis=0))
@@ -128,7 +118,5 @@ def test_get_super_learner(mock_rover):
         param_specs={"mu": {"variables": list(range(5))}},
     )
 
-    super_learner = mock_rover._get_super_learner(
-        max_num_models=10, kernel_param=10, ratio_cutoff=-0.2
-    )
-    assert np.allclose(super_learner.coef, mock_rover._get_super_coef(10, 10, 0.2))
+    super_learner = mock_rover._get_super_learner(top_pct_score=1, top_pct_learner=1)
+    assert np.allclose(super_learner.coef, mock_rover._get_super_coef(1, 1))

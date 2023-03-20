@@ -86,9 +86,8 @@ class Rover:
         data: DataFrame,
         strategies: list[str],
         strategy_options: Optional[dict] = None,
-        max_num_models: int = 10,
-        kernel_param: float = 10.0,
-        ratio_cutoff: float = 0.99,
+        top_pct_score: float = 0.1,
+        top_pct_learner: float = 1.0,
     ) -> None:
         """Fits the ensembled super learner.
 
@@ -118,9 +117,8 @@ class Rover:
             data=data, strategies=strategies, strategy_options=strategy_options
         )
         super_learner = self._get_super_learner(
-            max_num_models=max_num_models,
-            kernel_param=kernel_param,
-            ratio_cutoff=ratio_cutoff,
+            top_pct_score=top_pct_score,
+            top_pct_learner=top_pct_learner,
         )
         self._super_learner = super_learner
 
@@ -256,24 +254,21 @@ class Rover:
 
     # construct super learner ===================================================
     def _get_super_learner(
-        self, max_num_models: int, kernel_param: float, ratio_cutoff: float
+        self, top_pct_score: float, top_pct_learner: float
     ) -> Learner:
         """Call at the end of fit, so model is configured at the end of fit."""
-        means = self._get_super_coef(
-            max_num_models=max_num_models,
-            kernel_param=kernel_param,
-            ratio_cutoff=ratio_cutoff,
+        super_coef = self._get_super_coef(
+            top_pct_score=top_pct_score, top_pct_learner=top_pct_learner
         )
         super_learner_id = tuple(range(len(self.cov_exploring)))
         learner = self._get_learner(learner_id=super_learner_id, use_cache=False)
-        learner.coef = means
+        learner.coef = super_coef
         return learner
 
     def _get_super_coef(
         self,
-        max_num_models: int,
-        kernel_param: float,
-        ratio_cutoff: float,
+        top_pct_score: float,
+        top_pct_learner: float,
     ) -> NDArray:
         """
         Generates the weighted ensembled coefficients across all fitted learners.
@@ -288,22 +283,25 @@ class Rover:
         """
 
         # Validate the parameters
-        if ratio_cutoff > 1 or max_num_models < 1:
+        if top_pct_score > 1 or top_pct_score < 0:
             raise InvalidConfigurationError(
-                "The ratio cutoff parameter must be < 1, and max_num_models >= 1, "
-                "otherwise no models will be used for ensembling."
+                "The `top_pct_score` has to be between 0 and 1."
+            )
+        if top_pct_learner > 1 or top_pct_learner < 0:
+            raise InvalidConfigurationError(
+                "The `top_pct_learner` has to be between 0 and 1."
             )
 
         learner_ids, coef_mat = self._get_coef_mat()
 
         # Create weights
         scores = np.array([self.learners[key].score for key in learner_ids])
-        weights = scores_to_weights(
-            metrics=scores,
-            max_num_models=max_num_models,
-            kernel_param=kernel_param,
-            ratio_cutoff=ratio_cutoff,
+        weights = self._get_super_weights(
+            scores,
+            top_pct_score=top_pct_score,
+            top_pct_learner=top_pct_learner,
         )
+
         # Multiply by the coefficients
         super_coef = coef_mat.T.dot(weights)
 
@@ -348,26 +346,18 @@ class Rover:
                 pointer += len(self.cov_exploring)
         return coef_index
 
+    def _get_super_weights(
+        self,
+        scores: NDArray,
+        top_pct_score: float,
+        top_pct_learner: float,
+    ) -> NDArray:
+        weights = scores.copy()
+        argsort = np.argsort(weights)[::-1]
+        indices = weights >= weights[argsort[0]] * (1 - top_pct_score)
+        num_learners = int(np.floor(len(scores) * top_pct_learner)) + 1
+        indices[argsort[num_learners:]] = False
 
-def scores_to_weights(
-    metrics: NDArray,
-    max_num_models: int,
-    kernel_param: float,
-    ratio_cutoff: float,
-) -> NDArray:
-    # Drop performances that aren't in the top n or don't meet a threshold
-    # from being assigned weights
-    sort_indices = np.argsort(metrics)[::-1]
-    indices = metrics >= metrics.max() * ratio_cutoff
-    indices[sort_indices[max_num_models:]] = False
-
-    # Initialize weights vector
-    weights = np.zeros(metrics.size)
-    metrics = metrics[indices]
-
-    metrics = metrics / metrics.max()
-    # Apply exponential transform to selected performances
-    metrics = np.exp(kernel_param * metrics)
-    # Final weights should all sum to 1
-    weights[indices] = metrics / metrics.sum()
-    return weights
+        weights[~indices] = 0.0
+        weights /= weights.sum()
+        return weights
