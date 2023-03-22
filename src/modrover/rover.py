@@ -76,6 +76,21 @@ class Rover:
         return self.model_class.param_names
 
     @property
+    def num_vars(self) -> int:
+        return len(self.cov_exploring) + sum(
+            len(self.param_specs[param]["variables"]) for param in self.params
+        )
+
+    @property
+    def sucess_learner_ids(self) -> list[LearnerID]:
+        learner_ids = [
+            learner_id
+            for learner_id, learner in self.learners.items()
+            if learner.status == ModelStatus.SUCCESS
+        ]
+        return learner_ids
+
+    @property
     def super_learner(self) -> Learner:
         if not hasattr(self, "_super_learner"):
             raise NotFittedError("Rover has not been ensembled yet")
@@ -254,76 +269,44 @@ class Rover:
         self, top_pct_score: float, top_pct_learner: float
     ) -> Learner:
         """Call at the end of fit, so model is configured at the end of fit."""
-        super_coef = self._get_super_coef(
-            top_pct_score=top_pct_score, top_pct_learner=top_pct_learner
+        learner_ids = self.sucess_learner_ids
+        weights = self._get_super_weights(
+            learner_ids,
+            top_pct_score=top_pct_score,
+            top_pct_learner=top_pct_learner,
         )
+        super_coef = self._get_super_coef(learner_ids, weights)
+        super_vcov = self._get_super_vcov(learner_ids, weights)
+
         super_learner_id = tuple(range(len(self.cov_exploring)))
-        learner = self._get_learner(learner_id=super_learner_id, use_cache=False)
-        learner.coef = super_coef
-        return learner
+        super_learner = self._get_learner(learner_id=super_learner_id, use_cache=False)
+        super_learner.coef = super_coef
+        super_learner.vcov = super_vcov
+        return super_learner
 
     def _get_super_coef(
-        self,
-        top_pct_score: float,
-        top_pct_learner: float,
+        self, learner_ids: list[LearnerID], weights: NDArray
     ) -> NDArray:
         """Generates the weighted ensembled coefficients across all fitted
         learners.
 
         """
-
-        # Validate the parameters
-        if top_pct_score > 1 or top_pct_score < 0:
-            raise InvalidConfigurationError(
-                "The `top_pct_score` has to be between 0 and 1."
-            )
-        if top_pct_learner > 1 or top_pct_learner < 0:
-            raise InvalidConfigurationError(
-                "The `top_pct_learner` has to be between 0 and 1."
-            )
-
-        learner_ids, coef_mat = self._get_coef_mat()
-
-        # Create weights
-        scores = np.array([self.learners[key].score for key in learner_ids])
-        weights = self._get_super_weights(
-            scores,
-            top_pct_score=top_pct_score,
-            top_pct_learner=top_pct_learner,
-        )
-
-        # Multiply by the coefficients
-        super_coef = coef_mat.T.dot(weights)
-
+        super_coef = np.zeros(self.num_vars)
+        for learner_id, weight in zip(learner_ids, weights):
+            coef_index = self._get_coef_index(learner_id)
+            super_coef[coef_index] += weight * self.learners[learner_id].coef
         return super_coef
 
-    def _get_coef_mat(self) -> tuple[list[LearnerID], NDArray]:
-        """Create the full matrix of learner ids, mapped to its relative
-        coefficients.
-
-        Will result in a m x n matrix, where m = the number of fitted learners
-        in rover and n is the total number of covariates provided.
-
-        Each cell is the i-th learner's coefficient for the j-th covariate,
-        defaulting to 0 if the coefficient is not represented in that learner.
-
-        """
-        learner_ids = [
-            learner_id
-            for learner_id, learner in self.learners.items()
-            if learner.status == ModelStatus.SUCCESS
-        ]
-
-        # collect the coefficients from all models
-        num_vars = len(self.cov_exploring) + sum(
-            len(self.param_specs[param]["variables"]) for param in self.params
-        )
-        coef_mat = np.zeros((len(learner_ids), num_vars))
-        for row, learner_id in enumerate(learner_ids):
+    def _get_super_vcov(
+        self, learner_ids: list[LearnerID], weights: NDArray
+    ) -> NDArray:
+        super_vcov = np.zeros((self.num_vars, self.num_vars))
+        for learner_id, weight in zip(learner_ids, weights):
             coef_index = self._get_coef_index(learner_id)
-            coef_mat[row, coef_index] = self.learners[learner_id].coef
-
-        return learner_ids, coef_mat
+            super_vcov[np.ix_(coef_index, coef_index)] = (
+                weight * self.learners[learner_id].vcov
+            )
+        return super_vcov
 
     def _get_coef_index(self, learner_id: LearnerID) -> list[int]:
         coef_index, pointer = [], 0
@@ -338,16 +321,18 @@ class Rover:
 
     def _get_super_weights(
         self,
-        scores: NDArray,
+        learner_ids: list[LearnerID],
         top_pct_score: float,
         top_pct_learner: float,
     ) -> NDArray:
-        weights = scores.copy()
-        argsort = np.argsort(weights)[::-1]
-        indices = weights >= weights[argsort[0]] * (1 - top_pct_score)
+        scores = np.array(
+            [self.learners[learner_id].score for learner_id in learner_ids]
+        )
+        argsort = np.argsort(scores)[::-1]
+        indices = scores >= scores[argsort[0]] * (1 - top_pct_score)
         num_learners = int(np.floor(len(scores) * top_pct_learner)) + 1
         indices[argsort[num_learners:]] = False
 
-        weights[~indices] = 0.0
-        weights /= weights.sum()
+        scores[~indices] = 0.0
+        weights = scores / scores.sum()
         return weights

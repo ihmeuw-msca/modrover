@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+
 from modrover.globals import model_type_dict
 from modrover.learner import Learner
 
@@ -22,7 +23,12 @@ from modrover.learner import Learner
 def test_create_weights(
     mock_rover, scores, top_pct_scores, top_pct_learners, expectation
 ):
-    weights = mock_rover._get_super_weights(scores, top_pct_scores, top_pct_learners)
+    learner_ids = list(mock_rover.learners.keys())
+    for learner_id, score in zip(learner_ids, scores):
+        mock_rover.learners[learner_id].score = score
+    weights = mock_rover._get_super_weights(
+        learner_ids, top_pct_scores, top_pct_learners
+    )
     assert np.allclose(weights, expectation, atol=0.01)
     assert np.isclose(weights.sum(), 1)
 
@@ -58,22 +64,6 @@ def test_two_parameter_get_coef_index(mock_rover):
     assert np.allclose(coef_index, [0, 1, 2, 4])
 
 
-def test_get_coef_mat(mock_rover):
-    # Check weight generation
-    learner_ids, coef_mat = mock_rover._get_coef_mat()
-
-    # Check that the aggregation is correct
-    assert len(learner_ids) == len(coef_mat)
-
-    for learner_id, coef_row in zip(learner_ids, coef_mat):
-        # Offset of 1 since we have 1 fixed covariate from conftest
-        # include the 0 fixed covariate
-        indices = np.array(learner_id) + 1
-        indices = np.hstack([0, indices])
-        assert np.allclose(coef_row[indices], mock_rover.learners[learner_id].coef)
-        assert np.allclose(np.delete(coef_row, indices), 0)
-
-
 def test_get_super_coef(mock_rover):
     """Check the ensembled coefficients.
 
@@ -83,31 +73,34 @@ def test_get_super_coef(mock_rover):
     (3) - -0.3
     """
 
-    single_model_coeffs = mock_rover._get_super_coef(
-        top_pct_score=0.01, top_pct_learner=1
+    learner_ids = list(mock_rover.learners.keys())
+    weights = mock_rover._get_super_weights(
+        learner_ids, top_pct_score=0.01, top_pct_learner=1
     )
+    single_learner_coef = mock_rover._get_super_coef(learner_ids, weights)
     # With high cutoff, only single model is selected. Coefficients same as that single model
     best_learner_id = (1, 3)
     coef_index = mock_rover._get_coef_index(best_learner_id)
     expected_coef = np.zeros(5)
     expected_coef[coef_index] = mock_rover.learners[best_learner_id].coef
 
-    assert np.allclose(single_model_coeffs, expected_coef)
+    assert np.allclose(single_learner_coef, expected_coef)
 
     # Same with low max_num_models to consider
-    lone_max_model_coeffs = mock_rover._get_super_coef(
-        top_pct_score=0.01, top_pct_learner=1
+    weights = mock_rover._get_super_weights(
+        learner_ids, top_pct_score=1, top_pct_learner=0.01
     )
-    assert np.allclose(lone_max_model_coeffs, single_model_coeffs)
+    lone_max_learner_coef = mock_rover._get_super_coef(learner_ids, weights)
+    assert np.allclose(lone_max_learner_coef, single_learner_coef)
 
     # Check that if all models considered, we'll be bound by the max/min of the individual
     # learners' coefficients
-    all_models_means = mock_rover._get_super_coef(top_pct_score=1, top_pct_learner=1)
-    _, all_coeffs = mock_rover._get_coef_mat()
-    assert np.all(all_models_means <= all_coeffs.max(axis=0))
-    assert np.all(all_models_means >= all_coeffs.min(axis=0))
+    weights = mock_rover._get_super_weights(
+        learner_ids, top_pct_score=1, top_pct_learner=1
+    )
+    all_learners_avg_coef = mock_rover._get_super_coef(learner_ids, weights)
     # First covariate never represented in any sub learner, should have a 0 coefficient
-    assert np.isclose(all_models_means[1], 0)
+    assert np.isclose(all_learners_avg_coef[1], 0)
 
 
 def test_get_super_learner(mock_rover):
@@ -118,5 +111,12 @@ def test_get_super_learner(mock_rover):
         param_specs={"mu": {"variables": list(range(5))}},
     )
 
+    learner_ids = list(mock_rover.learners.keys())
+    weights = mock_rover._get_super_weights(learner_ids, 1, 1)
     super_learner = mock_rover._get_super_learner(top_pct_score=1, top_pct_learner=1)
-    assert np.allclose(super_learner.coef, mock_rover._get_super_coef(1, 1))
+    assert np.allclose(
+        super_learner.coef, mock_rover._get_super_coef(learner_ids, weights)
+    )
+    assert np.allclose(
+        super_learner.vcov, mock_rover._get_super_vcov(learner_ids, weights)
+    )
