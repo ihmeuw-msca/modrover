@@ -8,16 +8,17 @@ from modrover.rover import Rover
 
 
 class MockLearner(Learner):
-    """Mock learner that comes 'prefit' with coefficients."""
+    """Mock learner that comes 'prefit' with coef."""
 
-    def __init__(self, coefficients: np.ndarray, score: float):
+    def __init__(self, coef: np.ndarray, vcov: np.ndarray, score: float):
         self.score = score
         self.model = (
             lambda: None
         )  # arbitrary mutable object that we can assign weights to
-        self.model.size = len(coefficients)
+        self.model.size = len(coef)
 
-        self.coef = coefficients
+        self.coef = coef
+        self.vcov = vcov
         self.status = ModelStatus.SUCCESS
 
 
@@ -44,9 +45,9 @@ class MockRover(Rover):
 @pytest.fixture
 def mock_rover():
     learner_parameters = [
-        ((1, 3), np.array([0.2, 0.4, 0.6]), 1.2),
-        ((2, 3), np.array([0.0, 0.1, 0.5]), 1.0),
-        ((3,), np.array([1.0, -0.2]), -0.3),
+        ((1, 3), np.array([0.2, 0.4, 0.6]), np.identity(3), 1.2),
+        ((2, 3), np.array([0.0, 0.1, 0.5]), np.identity(3), 1.0),
+        ((3,), np.array([1.0, -0.2]), np.identity(2), -0.3),
     ]
 
     learners = {
