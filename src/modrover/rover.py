@@ -96,6 +96,12 @@ class Rover:
             raise NotFittedError("Rover has not been ensembled yet")
         return self._super_learner
 
+    @property
+    def summary(self) -> DataFrame:
+        if not hasattr(self, "_summary"):
+            raise NotFittedError("Rover has not been ensemble yet")
+        return self._summary
+
     def fit(
         self,
         data: DataFrame,
@@ -103,6 +109,7 @@ class Rover:
         strategy_options: Optional[dict] = None,
         top_pct_score: float = 0.1,
         top_pct_learner: float = 1.0,
+        coef_bounds: Optional[dict[str, tuple[float, float]]] = None,
     ) -> None:
         """Fits the ensembled super learner.
 
@@ -137,6 +144,7 @@ class Rover:
         super_learner = self._get_super_learner(
             top_pct_score=top_pct_score,
             top_pct_learner=top_pct_learner,
+            coef_bounds=coef_bounds,
         )
         self._super_learner = super_learner
 
@@ -155,9 +163,6 @@ class Rover:
 
         """
         return self.super_learner.predict(data)
-
-    def summary(self):
-        NotImplemented
 
     # validations ==============================================================
     def _as_model_type(self, model_type: str) -> str:
@@ -266,15 +271,15 @@ class Rover:
 
     # construct super learner ===================================================
     def _get_super_learner(
-        self, top_pct_score: float, top_pct_learner: float
+        self,
+        top_pct_score: float,
+        top_pct_learner: float,
+        coef_bounds: Optional[dict[str, tuple[float, float]]],
     ) -> Learner:
         """Call at the end of fit, so model is configured at the end of fit."""
-        learner_ids = self.sucess_learner_ids
-        weights = self._get_super_weights(
-            learner_ids,
-            top_pct_score=top_pct_score,
-            top_pct_learner=top_pct_learner,
-        )
+        self._summary = self._get_summary(top_pct_score, top_pct_learner, coef_bounds)
+        learner_ids = self._summary.loc[self._summary["valid"], "learner_id"]
+        weights = self._summary.loc[self._summary["valid"], "weight"]
         super_coef = self._get_super_coef(learner_ids, weights)
         super_vcov = self._get_super_vcov(learner_ids, weights)
 
@@ -283,6 +288,52 @@ class Rover:
         super_learner.coef = super_coef
         super_learner.vcov = super_vcov
         return super_learner
+
+    def _get_summary(
+        self,
+        top_pct_score: float = 0.1,
+        top_pct_learner: float = 1.0,
+        coef_bounds: Optional[dict[str, tuple[float, float]]] = None,
+    ) -> DataFrame:
+        super_learner_id = tuple(range(len(self.cov_exploring)))
+        param_specs = self._get_param_specs(super_learner_id)
+        columns = ["learner_id", "status"]
+        columns.extend(
+            [f"{p}_{v}" for p in self.params for v in param_specs[p]["variables"]]
+        )
+        columns.append("score")
+
+        df = DataFrame(columns=columns)
+        for learner_id, learner in self.learners.items():
+            row = [learner_id, learner.status]
+
+            coef, score = np.repeat(np.nan, self.num_vars), np.nan
+            if learner.status == ModelStatus.SUCCESS:
+                coef = np.zeros(self.num_vars)
+                coef_index = self._get_coef_index(learner_id)
+                coef[coef_index] = learner.coef
+                score = learner.score
+            row.extend(list(coef) + [score])
+            df.loc[len(df)] = row
+
+        df["coef_valid"] = True
+        if coef_bounds:
+            coef_valid = []
+            for cov, bounds in coef_bounds.items():
+                if not any(map(cov.startswith, self.params)):
+                    cov = "_".join([self.main_param, cov])
+                coef_valid.append((df[cov] >= bounds[0]) & (df[cov] <= bounds[1]))
+            df["coef_valid"] = np.vstack(coef_valid).all(axis=0)
+
+        df["valid"] = (df["status"] == ModelStatus.SUCCESS) & (df["coef_valid"])
+        df["weight"] = 0.0
+        df.loc[df["valid"], "weight"] = self._get_super_weights(
+            df.loc[df["valid"], "learner_id"],
+            top_pct_score,
+            top_pct_learner,
+        )
+
+        return df
 
     def _get_super_coef(
         self, learner_ids: list[LearnerID], weights: NDArray
