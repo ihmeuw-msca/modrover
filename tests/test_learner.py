@@ -24,6 +24,7 @@ def model_specs(dataset):
     specs = dict(
         model_class=model_type_dict["gaussian"],
         obs="y",
+        main_param="mu",
         param_specs={"mu": {"variables": ["intercept", "var_a", "var_b", "var_c"]}},
     )
     return specs
@@ -55,6 +56,7 @@ def test_two_param_model_fit(dataset):
     learner = Learner(
         model_class=model_type_dict["tobit"],
         obs="y",
+        main_param="mu",
         param_specs={
             "mu": {
                 "variables": ["intercept", "var_a", "var_b", "var_c"],

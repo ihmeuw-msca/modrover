@@ -230,6 +230,7 @@ class Rover:
         return Learner(
             self.model_class,
             self.obs,
+            self.main_param,
             param_specs,
             weights=self.weights,
             get_score=self.get_score,

@@ -35,8 +35,6 @@ class Learner:
         Name corresponding to the observation column in the data frame
     param_specs
         Parameter settings for the regmod model
-    offset
-        Name corresponding to the offset column in the data frame
     weights
         Name corresponding to the weights column in the data frame
     get_score
@@ -48,12 +46,14 @@ class Learner:
         self,
         model_class: type,
         obs: str,
+        main_param: str,
         param_specs: dict[str, dict],
         weights: str = "weights",
         get_score: Callable = get_rmse,
     ) -> None:
         self.model_class = model_class
         self.obs = obs
+        self.main_param = main_param
         self.weights = weights
         self.get_score = get_score
 
@@ -178,9 +178,8 @@ class Learner:
         """
         model = model or self.model
         df_pred = model.predict(data)
-        col_pred = model.param_names[0]
         model.data.detach_df()
-        return df_pred[col_pred].to_numpy()
+        return df_pred[self.main_param].to_numpy()
 
     def evaluate(self, data: DataFrame, model: Optional[RegmodModel] = None) -> float:
         """Given a model and a test set, generate an aggregate evaluate.
