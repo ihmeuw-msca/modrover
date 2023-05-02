@@ -29,8 +29,6 @@ class Rover:
         A list representing the covariates rover will explore over
     param_specs
         Parameter settings including, link function, priors, etc
-    offset
-        Offset of the model
     weights
         Column name corresponding to the weights for each data point
     holdouts
@@ -50,7 +48,6 @@ class Rover:
         cov_exploring: list[str],
         main_param: Optional[str] = None,
         param_specs: Optional[dict[str, dict]] = None,
-        offset: str = "offset",
         weights: str = "weights",
         holdouts: Optional[list[str]] = None,
         get_score: Callable = get_rmse,
@@ -60,7 +57,6 @@ class Rover:
         self.cov_fixed, self.cov_exploring = self._as_cov(cov_fixed, cov_exploring)
         self.main_param = self._as_main_param(main_param)
         self.param_specs = self._as_param_specs(param_specs)
-        self.offset = offset
         self.weights = weights
         self.holdouts = holdouts
         self.get_score = get_score
@@ -235,7 +231,6 @@ class Rover:
             self.model_class,
             self.obs,
             param_specs,
-            offset=self.offset,
             weights=self.weights,
             get_score=self.get_score,
         )

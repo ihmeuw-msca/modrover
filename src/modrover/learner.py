@@ -49,13 +49,11 @@ class Learner:
         model_class: type,
         obs: str,
         param_specs: dict[str, dict],
-        offset: str = "offset",
         weights: str = "weights",
         get_score: Callable = get_rmse,
     ) -> None:
         self.model_class = model_class
         self.obs = obs
-        self.offset = offset
         self.weights = weights
         self.get_score = get_score
 
@@ -214,7 +212,6 @@ class Learner:
         # TODO: this shouldn't be necessary in regmod v1.0.0
         data = Data(
             col_obs=self.obs,
-            col_offset=self.offset,
             col_weights=self.weights,
             subset_cols=False,
         )
