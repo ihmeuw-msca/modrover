@@ -10,6 +10,7 @@ from pandas import DataFrame
 from regmod.data import Data
 from regmod.models import Model as RegmodModel
 from regmod.variable import Variable
+from scipy.stats import norm
 
 from .globals import get_rmse
 
@@ -35,8 +36,6 @@ class Learner:
         Name corresponding to the observation column in the data frame
     param_specs
         Parameter settings for the regmod model
-    offset
-        Name corresponding to the offset column in the data frame
     weights
         Name corresponding to the weights column in the data frame
     get_score
@@ -48,14 +47,14 @@ class Learner:
         self,
         model_class: type,
         obs: str,
+        main_param: str,
         param_specs: dict[str, dict],
-        offset: str = "offset",
         weights: str = "weights",
         get_score: Callable = get_rmse,
     ) -> None:
         self.model_class = model_class
         self.obs = obs
-        self.offset = offset
+        self.main_param = main_param
         self.weights = weights
         self.get_score = get_score
 
@@ -158,7 +157,13 @@ class Learner:
         if not holdouts:
             self.score = self.evaluate(data)
 
-    def predict(self, data: DataFrame, model: Optional[RegmodModel] = None) -> NDArray:
+    def predict(
+        self,
+        data: DataFrame,
+        model: Optional[RegmodModel] = None,
+        return_ui: bool = False,
+        alpha: float = 0.05,
+    ) -> NDArray:
         """Wraps regmod's predict method to avoid modifying input dataset.
 
         Can be removed if regmod models use a functionally pure predict
@@ -179,10 +184,40 @@ class Learner:
 
         """
         model = model or self.model
-        df_pred = model.predict(data)
-        col_pred = model.param_names[0]
+        model.data.attach_df(data)
+        index = model.param_names.index(self.main_param)
+        param = model.params[index]
+
+        coef_index = model.indices[index]
+        coef = model.opt_coefs[coef_index]
+
+        offset = np.zeros(len(data))
+        if param.offset is not None:
+            offset = data[param.offset].to_numpy()
+
+        mat = param.get_mat(model.data)
+        lin_param = offset + mat.dot(coef)
+        pred = param.inv_link.fun(lin_param)
+
+        if return_ui:
+            if alpha < 0 or alpha > 0.5:
+                raise ValueError("`alpha` has to be between 0 and 0.5")
+            vcov = model.opt_vcov[coef_index, coef_index]
+            lin_param_sd = np.sqrt((mat.dot(vcov) * mat).sum(axis=1))
+            lin_param_lower = norm.ppf(0.5 * alpha, loc=lin_param, scale=lin_param_sd)
+            lin_param_upper = norm.ppf(
+                1 - 0.5 * alpha, loc=lin_param, scale=lin_param_sd
+            )
+            pred = np.vstack(
+                [
+                    pred,
+                    param.inv_link.fun(lin_param_lower),
+                    param.inv_link.fun(lin_param_upper),
+                ]
+            )
+
         model.data.detach_df()
-        return df_pred[col_pred].to_numpy()
+        return pred
 
     def evaluate(self, data: DataFrame, model: Optional[RegmodModel] = None) -> float:
         """Given a model and a test set, generate an aggregate evaluate.
@@ -214,7 +249,6 @@ class Learner:
         # TODO: this shouldn't be necessary in regmod v1.0.0
         data = Data(
             col_obs=self.obs,
-            col_offset=self.offset,
             col_weights=self.weights,
             subset_cols=False,
         )

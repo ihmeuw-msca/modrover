@@ -108,6 +108,7 @@ def test_get_super_learner(mock_rover):
     mock_rover._get_learner = lambda learner_id, use_cache: Learner(
         model_class=model_type_dict["gaussian"],
         obs="y",
+        main_param="mu",
         param_specs={"mu": {"variables": list(range(5))}},
     )
 

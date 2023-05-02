@@ -29,8 +29,6 @@ class Rover:
         A list representing the covariates rover will explore over
     param_specs
         Parameter settings including, link function, priors, etc
-    offset
-        Offset of the model
     weights
         Column name corresponding to the weights for each data point
     holdouts
@@ -50,7 +48,6 @@ class Rover:
         cov_exploring: list[str],
         main_param: Optional[str] = None,
         param_specs: Optional[dict[str, dict]] = None,
-        offset: str = "offset",
         weights: str = "weights",
         holdouts: Optional[list[str]] = None,
         get_score: Callable = get_rmse,
@@ -60,7 +57,6 @@ class Rover:
         self.cov_fixed, self.cov_exploring = self._as_cov(cov_fixed, cov_exploring)
         self.main_param = self._as_main_param(main_param)
         self.param_specs = self._as_param_specs(param_specs)
-        self.offset = offset
         self.weights = weights
         self.holdouts = holdouts
         self.get_score = get_score
@@ -150,7 +146,9 @@ class Rover:
         )
         self._super_learner = super_learner
 
-    def predict(self, data: DataFrame) -> NDArray:
+    def predict(
+        self, data: DataFrame, return_ui: bool = False, alpha: float = 0.05
+    ) -> NDArray:
         """Predict with ensembled super learner.
 
         Parameters
@@ -164,7 +162,7 @@ class Rover:
             Super learner predictions
 
         """
-        return self.super_learner.predict(data)
+        return self.super_learner.predict(data, return_ui=return_ui, alpha=alpha)
 
     # validations ==============================================================
     def _as_model_type(self, model_type: str) -> str:
@@ -234,8 +232,8 @@ class Rover:
         return Learner(
             self.model_class,
             self.obs,
+            self.main_param,
             param_specs,
-            offset=self.offset,
             weights=self.weights,
             get_score=self.get_score,
         )
@@ -280,7 +278,7 @@ class Rover:
     ) -> Learner:
         """Call at the end of fit, so model is configured at the end of fit."""
         df = self._get_summary(top_pct_score, top_pct_learner, coef_bounds)
-        df = df[df["valid"]]
+        df = df[df["weight"] > 0.0]
         learner_ids, weights = df["learner_id"], df["weight"]
         coefs = df[list(self.variables)].to_numpy()
         super_coef = coefs.T.dot(weights)
@@ -349,7 +347,7 @@ class Rover:
         super_vcov = np.zeros((self.num_vars, self.num_vars))
         for learner_id, weight in zip(learner_ids, weights):
             coef_index = self._get_coef_index(learner_id)
-            super_vcov[np.ix_(coef_index, coef_index)] = (
+            super_vcov[np.ix_(coef_index, coef_index)] += (
                 weight * self.learners[learner_id].vcov
             )
         return super_vcov
