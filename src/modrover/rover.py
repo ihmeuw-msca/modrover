@@ -76,19 +76,21 @@ class Rover:
         return self.model_class.param_names
 
     @property
-    def num_vars(self) -> int:
-        return len(self.cov_exploring) + sum(
-            len(self.param_specs[param]["variables"]) for param in self.params
-        )
+    def variables(self) -> tuple[str, ...]:
+        names = []
+        for p in self.params:
+            names.extend([f"{p}_{v}" for v in self.param_specs[p]["variables"]])
+            if p == self.main_param:
+                names.extend([f"{p}_{v}" for v in self.cov_exploring])
+        return tuple(names)
 
     @property
-    def sucess_learner_ids(self) -> list[LearnerID]:
-        learner_ids = [
-            learner_id
-            for learner_id, learner in self.learners.items()
-            if learner.status == ModelStatus.SUCCESS
-        ]
-        return learner_ids
+    def num_vars(self) -> int:
+        return len(self.variables)
+
+    @property
+    def super_learner_id(self) -> tuple[int, ...]:
+        return tuple(range(len(self.cov_exploring)))
 
     @property
     def super_learner(self) -> Learner:
@@ -277,14 +279,16 @@ class Rover:
         coef_bounds: Optional[dict[str, tuple[float, float]]],
     ) -> Learner:
         """Call at the end of fit, so model is configured at the end of fit."""
-        self._summary = self._get_summary(top_pct_score, top_pct_learner, coef_bounds)
-        learner_ids = self._summary.loc[self._summary["valid"], "learner_id"]
-        weights = self._summary.loc[self._summary["valid"], "weight"]
-        super_coef = self._get_super_coef(learner_ids, weights)
+        df = self._get_summary(top_pct_score, top_pct_learner, coef_bounds)
+        df = df[df["valid"]]
+        learner_ids, weights = df["learner_id"], df["weight"]
+        coefs = df[list(self.variables)].to_numpy()
+        super_coef = coefs.T.dot(weights)
         super_vcov = self._get_super_vcov(learner_ids, weights)
 
-        super_learner_id = tuple(range(len(self.cov_exploring)))
-        super_learner = self._get_learner(learner_id=super_learner_id, use_cache=False)
+        super_learner = self._get_learner(
+            learner_id=self.super_learner_id, use_cache=False
+        )
         super_learner.coef = super_coef
         super_learner.vcov = super_vcov
         return super_learner
@@ -295,18 +299,11 @@ class Rover:
         top_pct_learner: float = 1.0,
         coef_bounds: Optional[dict[str, tuple[float, float]]] = None,
     ) -> DataFrame:
-        super_learner_id = tuple(range(len(self.cov_exploring)))
-        param_specs = self._get_param_specs(super_learner_id)
-        columns = ["learner_id", "status"]
-        columns.extend(
-            [f"{p}_{v}" for p in self.params for v in param_specs[p]["variables"]]
+        df = DataFrame(
+            columns=["learner_id", "status"] + list(self.variables) + ["score"]
         )
-        columns.append("score")
-
-        df = DataFrame(columns=columns)
         for learner_id, learner in self.learners.items():
             row = [learner_id, learner.status]
-
             coef, score = np.repeat(np.nan, self.num_vars), np.nan
             if learner.status == ModelStatus.SUCCESS:
                 coef = np.zeros(self.num_vars)
@@ -325,14 +322,12 @@ class Rover:
                 coef_valid.append((df[cov] >= bounds[0]) & (df[cov] <= bounds[1]))
             df["coef_valid"] = np.vstack(coef_valid).all(axis=0)
 
-        df["valid"] = (df["status"] == ModelStatus.SUCCESS) & (df["coef_valid"])
+        df["valid"] = (df["status"] == ModelStatus.SUCCESS) & df["coef_valid"]
         df["weight"] = 0.0
         df.loc[df["valid"], "weight"] = self._get_super_weights(
-            df.loc[df["valid"], "learner_id"],
-            top_pct_score,
-            top_pct_learner,
+            df.loc[df["valid"], "learner_id"], top_pct_score, top_pct_learner
         )
-
+        self._summary = df
         return df
 
     def _get_super_coef(
