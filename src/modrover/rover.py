@@ -102,6 +102,12 @@ class Rover:
             raise NotFittedError("Rover has not been ensemble yet")
         return self._learner_info
 
+    @property
+    def summary(self) -> DataFrame:
+        if not hasattr(self, "_summary"):
+            raise NotFittedError("Rover has not been ensemble yet")
+        return self._summary
+
     def fit(
         self,
         data: DataFrame,
@@ -141,12 +147,11 @@ class Rover:
         self._explore(
             data=data, strategies=strategies, strategy_options=strategy_options
         )
-        super_learner = self._get_super_learner(
+        self._get_super_learner(
             top_pct_score=top_pct_score,
             top_pct_learner=top_pct_learner,
             coef_bounds=coef_bounds,
         )
-        self._super_learner = super_learner
 
     def predict(
         self, data: DataFrame, return_ui: bool = False, alpha: float = 0.05
@@ -306,7 +311,7 @@ class Rover:
                 )
                 curr_ids = next_ids
 
-    # construct super learner ===================================================
+    # construct super learner ==================================================
     def _get_super_learner(
         self,
         top_pct_score: float,
@@ -326,6 +331,8 @@ class Rover:
         )
         super_learner.coef = super_coef
         super_learner.vcov = super_vcov
+        self._super_learner = super_learner
+        self._get_summary()
         return super_learner
 
     def _get_learner_info(
@@ -417,3 +424,57 @@ class Rover:
         scores[~indices] = 0.0
         weights = scores / scores.sum()
         return weights
+
+    # diagnostics ==============================================================
+    def _get_summary(self) -> DataFrame:
+        # info
+        variables = self.variables
+        learner_info = self.learner_info[
+            self.learner_info["status"] == ModelStatus.SUCCESS
+        ]
+        learner_scores = dict(zip(learner_info["learner_id"], learner_info["score"]))
+        # ensemble info
+        coef_index = [
+            variables.index(f"{self.main_param}_{cov}") for cov in self.cov_exploring
+        ]
+        coef = self.super_learner.coef[coef_index]
+        coef_sd = np.sqrt(np.diag(self.super_learner.vcov)[coef_index])
+        # number of models the covariate is present
+        pct_present = [
+            (learner_info[f"{self.main_param}_{cov}"] != 0.0).sum() / len(learner_info)
+            for cov in self.cov_exploring
+        ]
+        # score when only the selected covariate is present
+        single_score = [
+            learner_scores.get((i,), np.nan) for i in range(len(self.cov_exploring))
+        ]
+        # average score when selected covariate is present or not
+        present_score = []
+        not_present_score = []
+        for cov in self.cov_exploring:
+            present_index = learner_info[f"{self.main_param}_{cov}"] != 0.0
+            present_score.append(learner_info[present_index]["score"].mean())
+            not_present_score.append(learner_info[~present_index]["score"].mean())
+
+        summary = DataFrame(
+            {
+                "cov": self.cov_exploring,
+                "coef": coef,
+                "coef_sd": coef_sd,
+                "pct_present": pct_present,
+                "single_score": single_score,
+                "present_score": present_score,
+                "not_present_score": not_present_score,
+            }
+        )
+
+        # derived quantities
+        summary["score_improvement"] = (
+            summary["present_score"] / summary["not_present_score"]
+        )
+        summary["rank"] = np.argsort(summary["score_improvement"].to_numpy())[::-1] + 1
+        coef_lwr = coef - 1.96 * coef_sd
+        coef_upr = coef + 1.96 * coef_sd
+        summary["significant"] = np.sign(coef_lwr * coef_upr) > 0
+        self._summary = summary
+        return summary
