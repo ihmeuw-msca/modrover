@@ -176,10 +176,21 @@ class Rover:
         fig, ax = plt.subplots(nrow, 1, figsize=(8, 2 * nrow), sharex=True)
         ax = [ax] if isinstance(ax, plt.Axes) else ax
 
-        learner_info = self.learner_info
+        learner_info = self.learner_info[
+            self.learner_info["status"] == ModelStatus.SUCCESS
+        ]
         summary = self.summary
         score = learner_info["score"].to_numpy()
         vmin, vmax = score.min(), score.max()
+        highlight_points = {
+            "final": learner_info["weight"] > 0,
+            "invalid": ~learner_info["valid"],
+        }
+        highlight_point_config = {
+            "single": {"marker": "^", "facecolor": "none", "edgecolor": "gray"},
+            "final": {"marker": "o", "facecolor": "none", "edgecolor": "gray"},
+            "invalid": {"marker": "x", "color": "gray"},
+        }
         for i, cov in enumerate(summary.sort_values("ranking")["cov"]):
             # plot the spread of the coef
             coef = learner_info[f"{self.main_param}_{cov}"].to_numpy()
@@ -193,6 +204,14 @@ class Rover:
                 vmin=vmin,
                 vmax=vmax,
             )
+            # mark single, final and invalid models
+            highlight_points["single"] = learner_info["learner_id"] == (
+                self.cov_exploring.index(cov),
+            )
+            for key, index in highlight_points.items():
+                ax[i].scatter(
+                    coef[index], coef_jitter[index], **highlight_point_config[key]
+                )
             # indicator of 0
             ax[i].axvline(0, linewidth=1, color="gray", linestyle="--")
             # colorbar
