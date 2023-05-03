@@ -237,6 +237,7 @@ class Rover:
             ax[i].set_ylabel(cov)
             ax[i].xaxis.set_tick_params(labelbottom=True)
             ax[i].set_yticks([])
+        ax[0].set_title(f"models = {len(learner_info)}/{2 ** len(summary)}", loc="left")
 
         return fig
 
