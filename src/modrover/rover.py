@@ -1,7 +1,9 @@
 from copy import deepcopy
 from typing import Callable, Optional
 
+import matplotlib.pyplot as plt
 import numpy as np
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from numpy.typing import NDArray
 from pandas import DataFrame
 
@@ -95,6 +97,12 @@ class Rover:
         return self._super_learner
 
     @property
+    def learner_info(self) -> DataFrame:
+        if not hasattr(self, "_learner_info"):
+            raise NotFittedError("Rover has not been ensemble yet")
+        return self._learner_info
+
+    @property
     def summary(self) -> DataFrame:
         if not hasattr(self, "_summary"):
             raise NotFittedError("Rover has not been ensemble yet")
@@ -139,12 +147,11 @@ class Rover:
         self._explore(
             data=data, strategies=strategies, strategy_options=strategy_options
         )
-        super_learner = self._get_super_learner(
+        self._get_super_learner(
             top_pct_score=top_pct_score,
             top_pct_learner=top_pct_learner,
             coef_bounds=coef_bounds,
         )
-        self._super_learner = super_learner
 
     def predict(
         self, data: DataFrame, return_ui: bool = False, alpha: float = 0.05
@@ -163,6 +170,118 @@ class Rover:
 
         """
         return self.super_learner.predict(data, return_ui=return_ui, alpha=alpha)
+
+    def plot(self, experimental: bool = False, bins: int = 50) -> plt.Figure:
+        nrow = len(self.cov_exploring)
+        fig, ax = plt.subplots(nrow, 1, figsize=(8, 2 * nrow), sharex=True)
+        ax = [ax] if isinstance(ax, plt.Axes) else ax
+
+        learner_info = self.learner_info[
+            self.learner_info["status"] == ModelStatus.SUCCESS
+        ].copy()
+        all_coef = learner_info[
+            [f"{self.main_param}_{cov}" for cov in self.cov_exploring]
+        ].to_numpy()
+        cmin, cmax = all_coef.min(), all_coef.max()
+        bins = np.linspace(cmin, cmax, bins + 1)
+
+        summary = self.summary
+        score = learner_info["score"].to_numpy()
+        vmin, vmax = score.min(), score.max()
+        highlight_index = {
+            "final": learner_info["weight"] > 0,
+            "invalid": ~learner_info["valid"],
+        }
+        highlight_config = {
+            "single": {
+                "marker": "^",
+                "facecolor": "none",
+                "edgecolor": "gray",
+                "alpha": 0.5,
+            },
+            "final": {
+                "marker": "o",
+                "facecolor": "none",
+                "edgecolor": "gray",
+                "alpha": 0.5,
+            },
+            "invalid": {"marker": "x", "color": "gray", "alpha": 0.5},
+        }
+        for i, cov in enumerate(summary.sort_values("ranking")["cov"]):
+            # plot the spread of the coef
+            name = f"{self.main_param}_{cov}"
+            coef = learner_info[name].to_numpy()
+            coef_jitter = np.random.rand(coef.size)
+            if experimental:
+                learner_info["bin_id"] = np.digitize(learner_info[name], bins)
+                coef_jitter = learner_info.groupby("bin_id")["score"].rank() / len(
+                    learner_info
+                )
+            im = ax[i].scatter(
+                coef,
+                coef_jitter,
+                alpha=0.2,
+                c=score,
+                edgecolors="none",
+                vmin=vmin,
+                vmax=vmax,
+            )
+            # mark single, final and invalid models
+            highlight_index["single"] = learner_info["learner_id"] == (
+                self.cov_exploring.index(cov),
+            )
+            for key, index in highlight_index.items():
+                ax[i].scatter(coef[index], coef_jitter[index], **highlight_config[key])
+            # indicator of 0
+            ax[i].axvline(0, linewidth=1, color="gray", linestyle="--")
+            # colorbar
+            divider = make_axes_locatable(ax[i])
+            cax = divider.append_axes("right", size="2%", pad=0.05)
+            cbar = fig.colorbar(im, cax=cax, orientation="vertical")
+            cbar.ax.set_yticks([vmin, vmax])
+            # plot ensemble result
+            index = summary["cov"] == cov
+            super_coef = summary[index]["coef"].iloc[0]
+            super_coef_sd = summary[index]["coef_sd"].iloc[0]
+            super_coef_lwr = super_coef - 1.96 * super_coef_sd
+            super_coef_upr = super_coef + 1.96 * super_coef_sd
+            ax[i].axvline(super_coef, linewidth=1, color="#008080")
+            ax[i].plot(
+                [super_coef_lwr, super_coef_upr],
+                [0.5, 0.5],
+                linewidth=1,
+                color="#008080",
+            )
+            # summary text
+            text = [
+                f"ranking = {summary[index]['ranking'].iloc[0]} / {len(summary)}",
+                f"significant = {summary[index]['significant'].iloc[0]}",
+                f"pct_present = {summary[index]['pct_present'].iloc[0]:.2%}",
+                f"score_improvement = {summary[index]['score_improvement'].iloc[0]:.4}",
+                f"coef = {super_coef:.2f} ({super_coef_lwr:.2f}, {super_coef_upr:.2f})",
+            ]
+            text = "\n".join(text)
+            ax[i].text(
+                1.15,
+                1,
+                text,
+                horizontalalignment="left",
+                verticalalignment="top",
+                transform=ax[i].transAxes,
+                fontsize=9,
+                bbox=dict(
+                    boxstyle="round", facecolor="none", edgecolor="grey", alpha=0.5
+                ),
+            )
+            # config
+            ax[i].set_ylabel(cov)
+            ax[i].xaxis.set_tick_params(labelbottom=True)
+            ax[i].set_yticks([])
+            if experimental:
+                ax[i].set_yticks([0, 1])
+        ax[0].set_title(f"models = {len(learner_info)}/{2 ** len(summary)}", loc="left")
+
+        return fig
 
     # validations ==============================================================
     def _as_model_type(self, model_type: str) -> str:
@@ -269,7 +388,7 @@ class Rover:
                 )
                 curr_ids = next_ids
 
-    # construct super learner ===================================================
+    # construct super learner ==================================================
     def _get_super_learner(
         self,
         top_pct_score: float,
@@ -277,7 +396,7 @@ class Rover:
         coef_bounds: Optional[dict[str, tuple[float, float]]],
     ) -> Learner:
         """Call at the end of fit, so model is configured at the end of fit."""
-        df = self._get_summary(top_pct_score, top_pct_learner, coef_bounds)
+        df = self._get_learner_info(top_pct_score, top_pct_learner, coef_bounds)
         df = df[df["weight"] > 0.0]
         learner_ids, weights = df["learner_id"], df["weight"]
         coefs = df[list(self.variables)].to_numpy()
@@ -289,9 +408,11 @@ class Rover:
         )
         super_learner.coef = super_coef
         super_learner.vcov = super_vcov
+        self._super_learner = super_learner
+        self._get_summary()
         return super_learner
 
-    def _get_summary(
+    def _get_learner_info(
         self,
         top_pct_score: float = 0.1,
         top_pct_learner: float = 1.0,
@@ -325,7 +446,7 @@ class Rover:
         df.loc[df["valid"], "weight"] = self._get_super_weights(
             df.loc[df["valid"], "learner_id"], top_pct_score, top_pct_learner
         )
-        self._summary = df
+        self._learner_info = df
         return df
 
     def _get_super_coef(
@@ -380,3 +501,64 @@ class Rover:
         scores[~indices] = 0.0
         weights = scores / scores.sum()
         return weights
+
+    # diagnostics ==============================================================
+    def _get_summary(self) -> DataFrame:
+        # info
+        variables = self.variables
+        learner_info = self.learner_info[
+            self.learner_info["status"] == ModelStatus.SUCCESS
+        ]
+        learner_scores = dict(zip(learner_info["learner_id"], learner_info["score"]))
+        # ensemble info
+        coef_index = [
+            variables.index(f"{self.main_param}_{cov}") for cov in self.cov_exploring
+        ]
+        coef = self.super_learner.coef[coef_index]
+        coef_sd = np.sqrt(np.diag(self.super_learner.vcov)[coef_index])
+        # number of models the covariate is present
+        pct_present = [
+            (learner_info[f"{self.main_param}_{cov}"] != 0.0).sum() / len(learner_info)
+            for cov in self.cov_exploring
+        ]
+        # score when only the selected covariate is present
+        single_score = [
+            learner_scores.get((i,), np.nan) for i in range(len(self.cov_exploring))
+        ]
+        # average score when selected covariate is present or not
+        present_score = []
+        not_present_score = []
+        for cov in self.cov_exploring:
+            present_index = learner_info[f"{self.main_param}_{cov}"] != 0.0
+            ps, nps = 0.0, 0.0
+            if any(present_index):
+                ps = learner_info[present_index]["score"].mean()
+            if not all(present_index):
+                nps = learner_info[~present_index]["score"].mean()
+            present_score.append(ps)
+            not_present_score.append(nps)
+
+        summary = DataFrame(
+            {
+                "cov": self.cov_exploring,
+                "coef": coef,
+                "coef_sd": coef_sd,
+                "pct_present": pct_present,
+                "single_score": single_score,
+                "present_score": present_score,
+                "not_present_score": not_present_score,
+            }
+        )
+
+        # derived quantities
+        summary["score_improvement"] = (
+            summary["present_score"] / summary["not_present_score"]
+        )
+        summary["ranking"] = (
+            summary["score_improvement"].rank(ascending=False).astype(int)
+        )
+        coef_lwr = coef - 1.96 * coef_sd
+        coef_upr = coef + 1.96 * coef_sd
+        summary["significant"] = np.sign(coef_lwr * coef_upr) > 0
+        self._summary = summary
+        return summary
