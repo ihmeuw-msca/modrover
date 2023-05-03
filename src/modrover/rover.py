@@ -180,7 +180,7 @@ class Rover:
         summary = self.summary
         score = learner_info["score"].to_numpy()
         vmin, vmax = score.min(), score.max()
-        for i, cov in enumerate(self.cov_exploring):
+        for i, cov in enumerate(summary.sort_values("ranking")["cov"]):
             # plot the spread of the coef
             coef = learner_info[f"{self.main_param}_{cov}"].to_numpy()
             coef_jitter = np.random.rand(coef.size)
