@@ -47,7 +47,7 @@ def mock_rover():
     learner_parameters = [
         ((1, 3), np.array([0.2, 0.4, 0.6]), np.identity(3), 1.2),
         ((2, 3), np.array([0.0, 0.1, 0.5]), np.identity(3), 1.0),
-        ((3,), np.array([1.0, -0.2]), np.identity(2), -0.3),
+        ((3,), np.array([1.0, -0.2]), np.identity(2), 0.3),
     ]
 
     learners = {

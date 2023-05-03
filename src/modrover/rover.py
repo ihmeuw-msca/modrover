@@ -530,8 +530,13 @@ class Rover:
         not_present_score = []
         for cov in self.cov_exploring:
             present_index = learner_info[f"{self.main_param}_{cov}"] != 0.0
-            present_score.append(learner_info[present_index]["score"].mean())
-            not_present_score.append(learner_info[~present_index]["score"].mean())
+            ps, nps = 0.0, 0.0
+            if any(present_index):
+                ps = learner_info[present_index]["score"].mean()
+            if not all(present_index):
+                nps = learner_info[~present_index]["score"].mean()
+            present_score.append(ps)
+            not_present_score.append(nps)
 
         summary = DataFrame(
             {

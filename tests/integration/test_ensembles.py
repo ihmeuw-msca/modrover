@@ -114,9 +114,14 @@ def test_get_super_learner(mock_rover):
 
     learner_ids = list(mock_rover.learners.keys())
     weights = mock_rover._get_super_weights(learner_ids, 1, 1)
-    super_learner = mock_rover._get_super_learner(
-        top_pct_score=1, top_pct_learner=1, coef_bounds=None
-    )
+    try:
+        super_learner = mock_rover._get_super_learner(
+            top_pct_score=1, top_pct_learner=1, coef_bounds=None
+        )
+    except:
+        import pdb
+
+        pdb.set_trace()
     assert np.allclose(
         super_learner.coef, mock_rover._get_super_coef(learner_ids, weights)
     )

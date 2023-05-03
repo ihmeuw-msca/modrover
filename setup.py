@@ -16,6 +16,7 @@ if __name__ == "__main__":
     install_requirements = [
         "regmod==0.1.0",
         "pplkit",
+        "matplotlib",
     ]
     test_requirements = [
         "pytest",
