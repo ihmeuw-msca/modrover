@@ -177,6 +177,7 @@ class Rover:
         ax = [ax] if isinstance(ax, plt.Axes) else ax
 
         learner_info = self.learner_info
+        summary = self.summary
         score = learner_info["score"].to_numpy()
         vmin, vmax = score.min(), score.max()
         for i, cov in enumerate(self.cov_exploring):
@@ -199,6 +200,19 @@ class Rover:
             cax = divider.append_axes("right", size="2%", pad=0.05)
             cbar = fig.colorbar(im, cax=cax, orientation="vertical")
             cbar.ax.set_yticks([vmin, vmax])
+            # plot ensemble result
+            index = summary["cov"] == cov
+            super_coef = summary[index]["coef"].iloc[0]
+            super_coef_sd = summary[index]["coef_sd"].iloc[0]
+            super_coef_lwr = super_coef - 1.96 * super_coef_sd
+            super_coef_upr = super_coef + 1.96 * super_coef_sd
+            ax[i].axvline(super_coef, linewidth=1, color="#008080")
+            ax[i].plot(
+                [super_coef_lwr, super_coef_upr],
+                [0.5, 0.5],
+                linewidth=1,
+                color="#008080",
+            )
             # config
             ax[i].set_ylabel(cov)
             ax[i].xaxis.set_tick_params(labelbottom=True)
