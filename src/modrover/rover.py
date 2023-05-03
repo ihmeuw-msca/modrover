@@ -171,7 +171,9 @@ class Rover:
         """
         return self.super_learner.predict(data, return_ui=return_ui, alpha=alpha)
 
-    def plot(self) -> plt.Figure:
+    def plot(self, experimental: bool = False, **kwargs) -> plt.Figure:
+        if experimental:
+            return self._plot_experimental(**kwargs)
         nrow = len(self.cov_exploring)
         fig, ax = plt.subplots(nrow, 1, figsize=(8, 2 * nrow), sharex=True)
         ax = [ax] if isinstance(ax, plt.Axes) else ax
@@ -187,9 +189,19 @@ class Rover:
             "invalid": ~learner_info["valid"],
         }
         highlight_config = {
-            "single": {"marker": "^", "facecolor": "none", "edgecolor": "gray"},
-            "final": {"marker": "o", "facecolor": "none", "edgecolor": "gray"},
-            "invalid": {"marker": "x", "color": "gray"},
+            "single": {
+                "marker": "^",
+                "facecolor": "none",
+                "edgecolor": "gray",
+                "alpha": 0.5,
+            },
+            "final": {
+                "marker": "o",
+                "facecolor": "none",
+                "edgecolor": "gray",
+                "alpha": 0.5,
+            },
+            "invalid": {"marker": "x", "color": "gray", "alpha": 0.5},
         }
         for i, cov in enumerate(summary.sort_values("ranking")["cov"]):
             # plot the spread of the coef
@@ -255,6 +267,114 @@ class Rover:
             ax[i].set_ylabel(cov)
             ax[i].xaxis.set_tick_params(labelbottom=True)
             ax[i].set_yticks([])
+        ax[0].set_title(f"models = {len(learner_info)}/{2 ** len(summary)}", loc="left")
+
+        return fig
+
+    def _plot_experimental(self, bins: int = 50) -> plt.Figure:
+        nrow = len(self.cov_exploring)
+        fig, ax = plt.subplots(nrow, 1, figsize=(8, 2 * nrow), sharex=True)
+        ax = [ax] if isinstance(ax, plt.Axes) else ax
+
+        learner_info = self.learner_info[
+            self.learner_info["status"] == ModelStatus.SUCCESS
+        ].copy()
+        all_coef = learner_info[
+            [f"{self.main_param}_{cov}" for cov in self.cov_exploring]
+        ].to_numpy()
+        cmin, cmax = all_coef.min(), all_coef.max()
+        bins = np.linspace(cmin, cmax, bins + 1)
+
+        summary = self.summary
+        score = learner_info["score"].to_numpy()
+        vmin, vmax = score.min(), score.max()
+        highlight_index = {
+            "final": learner_info["weight"] > 0,
+            "invalid": ~learner_info["valid"],
+        }
+        highlight_config = {
+            "single": {
+                "marker": "^",
+                "facecolor": "none",
+                "edgecolor": "gray",
+                "alpha": 0.5,
+            },
+            "final": {
+                "marker": "o",
+                "facecolor": "none",
+                "edgecolor": "gray",
+                "alpha": 0.5,
+            },
+            "invalid": {"marker": "x", "color": "gray", "alpha": 0.5},
+        }
+        for i, cov in enumerate(summary.sort_values("ranking")["cov"]):
+            # plot the spread of the coef
+            name = f"{self.main_param}_{cov}"
+            learner_info["bin_id"] = np.digitize(learner_info[name], bins)
+            coef = learner_info[name].to_numpy()
+            coef_jitter = learner_info.groupby("bin_id")["score"].rank() / len(
+                learner_info
+            )
+            im = ax[i].scatter(
+                coef,
+                coef_jitter,
+                alpha=0.2,
+                c=score,
+                edgecolors="none",
+                vmin=vmin,
+                vmax=vmax,
+            )
+            # mark single, final and invalid models
+            highlight_index["single"] = learner_info["learner_id"] == (
+                self.cov_exploring.index(cov),
+            )
+            for key, index in highlight_index.items():
+                ax[i].scatter(coef[index], coef_jitter[index], **highlight_config[key])
+            # indicator of 0
+            ax[i].axvline(0, linewidth=1, color="gray", linestyle="--")
+            # colorbar
+            divider = make_axes_locatable(ax[i])
+            cax = divider.append_axes("right", size="2%", pad=0.05)
+            cbar = fig.colorbar(im, cax=cax, orientation="vertical")
+            cbar.ax.set_yticks([vmin, vmax])
+            # plot ensemble result
+            index = summary["cov"] == cov
+            super_coef = summary[index]["coef"].iloc[0]
+            super_coef_sd = summary[index]["coef_sd"].iloc[0]
+            super_coef_lwr = super_coef - 1.96 * super_coef_sd
+            super_coef_upr = super_coef + 1.96 * super_coef_sd
+            ax[i].axvline(super_coef, linewidth=1, color="#008080")
+            ax[i].plot(
+                [super_coef_lwr, super_coef_upr],
+                [0.5, 0.5],
+                linewidth=1,
+                color="#008080",
+            )
+            # summary text
+            text = [
+                f"ranking = {summary[index]['ranking'].iloc[0]} / {len(summary)}",
+                f"significant = {summary[index]['significant'].iloc[0]}",
+                f"pct_present = {summary[index]['pct_present'].iloc[0]:.2%}",
+                f"score_improvement = {summary[index]['score_improvement'].iloc[0]:.4}",
+                f"coef = {super_coef:.2f} ({super_coef_lwr:.2f}, {super_coef_upr:.2f})",
+            ]
+            text = "\n".join(text)
+            ax[i].text(
+                1.15,
+                1,
+                text,
+                horizontalalignment="left",
+                verticalalignment="top",
+                transform=ax[i].transAxes,
+                fontsize=9,
+                bbox=dict(
+                    boxstyle="round", facecolor="none", edgecolor="grey", alpha=0.5
+                ),
+            )
+            # config
+            ax[i].set_ylabel(cov)
+            ax[i].xaxis.set_tick_params(labelbottom=True)
+            ax[i].set_yticks([0, 1])
         ax[0].set_title(f"models = {len(learner_info)}/{2 ** len(summary)}", loc="left")
 
         return fig
@@ -525,9 +645,9 @@ class Rover:
         summary["score_improvement"] = (
             summary["present_score"] / summary["not_present_score"]
         )
-        sort_index = np.argsort(summary["score_improvement"])[::-1]
-        summary.loc[sort_index, "ranking"] = np.arange(len(summary), dtype=int) + 1
-        summary["ranking"] = summary["ranking"].astype(int)
+        summary["ranking"] = (
+            summary["score_improvement"].rank(ascending=False).astype(int)
+        )
         coef_lwr = coef - 1.96 * coef_sd
         coef_upr = coef + 1.96 * coef_sd
         summary["significant"] = np.sign(coef_lwr * coef_upr) > 0
