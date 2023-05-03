@@ -213,6 +213,26 @@ class Rover:
                 linewidth=1,
                 color="#008080",
             )
+            # summary text
+            text = [
+                f"ranking = {summary[index]['ranking'].iloc[0]} / {len(summary)}",
+                f"significant = {summary[index]['significant'].iloc[0]}",
+                f"pct_present = {summary[index]['pct_present'].iloc[0]:.2%}",
+                f"score_improvement = {summary[index]['score_improvement'].iloc[0]:.4}",
+            ]
+            text = "\n".join(text)
+            ax[i].text(
+                1.15,
+                1,
+                text,
+                horizontalalignment="left",
+                verticalalignment="top",
+                transform=ax[i].transAxes,
+                fontsize=9,
+                bbox=dict(
+                    boxstyle="round", facecolor="none", edgecolor="grey", alpha=0.5
+                ),
+            )
             # config
             ax[i].set_ylabel(cov)
             ax[i].xaxis.set_tick_params(labelbottom=True)
@@ -486,7 +506,9 @@ class Rover:
         summary["score_improvement"] = (
             summary["present_score"] / summary["not_present_score"]
         )
-        summary["rank"] = np.argsort(summary["score_improvement"].to_numpy())[::-1] + 1
+        sort_index = np.argsort(summary["score_improvement"])[::-1]
+        summary.loc[sort_index, "ranking"] = np.arange(len(summary), dtype=int) + 1
+        summary["ranking"] = summary["ranking"].astype(int)
         coef_lwr = coef - 1.96 * coef_sd
         coef_upr = coef + 1.96 * coef_sd
         summary["significant"] = np.sign(coef_lwr * coef_upr) > 0
