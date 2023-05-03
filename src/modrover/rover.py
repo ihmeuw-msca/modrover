@@ -182,11 +182,11 @@ class Rover:
         summary = self.summary
         score = learner_info["score"].to_numpy()
         vmin, vmax = score.min(), score.max()
-        highlight_points = {
+        highlight_index = {
             "final": learner_info["weight"] > 0,
             "invalid": ~learner_info["valid"],
         }
-        highlight_point_config = {
+        highlight_config = {
             "single": {"marker": "^", "facecolor": "none", "edgecolor": "gray"},
             "final": {"marker": "o", "facecolor": "none", "edgecolor": "gray"},
             "invalid": {"marker": "x", "color": "gray"},
@@ -205,13 +205,11 @@ class Rover:
                 vmax=vmax,
             )
             # mark single, final and invalid models
-            highlight_points["single"] = learner_info["learner_id"] == (
+            highlight_index["single"] = learner_info["learner_id"] == (
                 self.cov_exploring.index(cov),
             )
-            for key, index in highlight_points.items():
-                ax[i].scatter(
-                    coef[index], coef_jitter[index], **highlight_point_config[key]
-                )
+            for key, index in highlight_index.items():
+                ax[i].scatter(coef[index], coef_jitter[index], **highlight_config[key])
             # indicator of 0
             ax[i].axvline(0, linewidth=1, color="gray", linestyle="--")
             # colorbar
@@ -238,6 +236,7 @@ class Rover:
                 f"significant = {summary[index]['significant'].iloc[0]}",
                 f"pct_present = {summary[index]['pct_present'].iloc[0]:.2%}",
                 f"score_improvement = {summary[index]['score_improvement'].iloc[0]:.4}",
+                f"coef = {super_coef:.2f} ({super_coef_lwr:.2f}, {super_coef_upr:.2f})",
             ]
             text = "\n".join(text)
             ax[i].text(
