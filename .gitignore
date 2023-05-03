@@ -133,3 +133,8 @@ dmypy.json
 
 # Mac artifacts
 .DS_Store
+
+# experiments
+data/
+notebooks/
+experiments/

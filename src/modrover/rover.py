@@ -95,10 +95,10 @@ class Rover:
         return self._super_learner
 
     @property
-    def summary(self) -> DataFrame:
-        if not hasattr(self, "_summary"):
+    def learner_info(self) -> DataFrame:
+        if not hasattr(self, "_learner_info"):
             raise NotFittedError("Rover has not been ensemble yet")
-        return self._summary
+        return self._learner_info
 
     def fit(
         self,
@@ -277,7 +277,7 @@ class Rover:
         coef_bounds: Optional[dict[str, tuple[float, float]]],
     ) -> Learner:
         """Call at the end of fit, so model is configured at the end of fit."""
-        df = self._get_summary(top_pct_score, top_pct_learner, coef_bounds)
+        df = self._get_learner_info(top_pct_score, top_pct_learner, coef_bounds)
         df = df[df["weight"] > 0.0]
         learner_ids, weights = df["learner_id"], df["weight"]
         coefs = df[list(self.variables)].to_numpy()
@@ -291,7 +291,7 @@ class Rover:
         super_learner.vcov = super_vcov
         return super_learner
 
-    def _get_summary(
+    def _get_learner_info(
         self,
         top_pct_score: float = 0.1,
         top_pct_learner: float = 1.0,
@@ -325,7 +325,7 @@ class Rover:
         df.loc[df["valid"], "weight"] = self._get_super_weights(
             df.loc[df["valid"], "learner_id"], top_pct_score, top_pct_learner
         )
-        self._summary = df
+        self._learner_info = df
         return df
 
     def _get_super_coef(
