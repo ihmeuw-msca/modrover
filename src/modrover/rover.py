@@ -1,7 +1,9 @@
 from copy import deepcopy
 from typing import Callable, Optional
 
+import matplotlib.pyplot as plt
 import numpy as np
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from numpy.typing import NDArray
 from pandas import DataFrame
 
@@ -163,6 +165,41 @@ class Rover:
 
         """
         return self.super_learner.predict(data, return_ui=return_ui, alpha=alpha)
+
+    def plot(self) -> plt.Figure:
+        nrow = len(self.cov_exploring)
+        fig, ax = plt.subplots(nrow, 1, figsize=(8, 2 * nrow), sharex=True)
+        ax = [ax] if isinstance(ax, plt.Axes) else ax
+
+        learner_info = self.learner_info
+        score = learner_info["score"].to_numpy()
+        vmin, vmax = score.min(), score.max()
+        for i, cov in enumerate(self.cov_exploring):
+            # plot the spread of the coef
+            coef = learner_info[f"{self.main_param}_{cov}"].to_numpy()
+            coef_jitter = np.random.rand(coef.size)
+            im = ax[i].scatter(
+                coef,
+                coef_jitter,
+                alpha=0.2,
+                c=score,
+                edgecolors="none",
+                vmin=vmin,
+                vmax=vmax,
+            )
+            # indicator of 0
+            ax[i].axvline(0, linewidth=1, color="gray", linestyle="--")
+            # colorbar
+            divider = make_axes_locatable(ax[i])
+            cax = divider.append_axes("right", size="2%", pad=0.05)
+            cbar = fig.colorbar(im, cax=cax, orientation="vertical")
+            cbar.ax.set_yticks([vmin, vmax])
+            # config
+            ax[i].set_ylabel(cov)
+            ax[i].xaxis.set_tick_params(labelbottom=True)
+            ax[i].set_yticks([])
+
+        return fig
 
     # validations ==============================================================
     def _as_model_type(self, model_type: str) -> str:
