@@ -171,7 +171,7 @@ class Rover:
         """
         return self.super_learner.predict(data, return_ui=return_ui, alpha=alpha)
 
-    def plot(self, experimental: bool = False, bins: int = 50) -> plt.Figure:
+    def plot(self, bins: Optional[int] = None) -> plt.Figure:
         nrow = len(self.cov_exploring)
         fig, ax = plt.subplots(nrow, 1, figsize=(8, 2 * nrow), sharex=True)
         ax = [ax] if isinstance(ax, plt.Axes) else ax
@@ -179,11 +179,12 @@ class Rover:
         learner_info = self.learner_info[
             self.learner_info["status"] == ModelStatus.SUCCESS
         ].copy()
-        all_coef = learner_info[
-            [f"{self.main_param}_{cov}" for cov in self.cov_exploring]
-        ].to_numpy()
-        cmin, cmax = all_coef.min(), all_coef.max()
-        bins = np.linspace(cmin, cmax, bins + 1)
+        if bins is not None:
+            all_coef = learner_info[
+                [f"{self.main_param}_{cov}" for cov in self.cov_exploring]
+            ].to_numpy()
+            cmin, cmax = all_coef.min(), all_coef.max()
+            bins = np.linspace(cmin, cmax, bins + 1)
 
         summary = self.summary
         score = learner_info["score"].to_numpy()
@@ -212,7 +213,7 @@ class Rover:
             name = f"{self.main_param}_{cov}"
             coef = learner_info[name].to_numpy()
             coef_jitter = np.random.rand(coef.size)
-            if experimental:
+            if bins is not None:
                 learner_info["bin_id"] = np.digitize(learner_info[name], bins)
                 coef_jitter = learner_info.groupby("bin_id")["score"].rank() / len(
                     learner_info
@@ -242,9 +243,8 @@ class Rover:
             # plot ensemble result
             index = summary["cov"] == cov
             super_coef = summary[index]["coef"].iloc[0]
-            super_coef_sd = summary[index]["coef_sd"].iloc[0]
-            super_coef_lwr = super_coef - 1.96 * super_coef_sd
-            super_coef_upr = super_coef + 1.96 * super_coef_sd
+            super_coef_lwr = summary[index]["coef_lwr"].iloc[0]
+            super_coef_upr = summary[index]["coef_upr"].iloc[0]
             ax[i].axvline(super_coef, linewidth=1, color="#008080")
             ax[i].plot(
                 [super_coef_lwr, super_coef_upr],
@@ -277,7 +277,7 @@ class Rover:
             ax[i].set_ylabel(cov)
             ax[i].xaxis.set_tick_params(labelbottom=True)
             ax[i].set_yticks([])
-            if experimental:
+            if bins is not None:
                 ax[i].set_yticks([0, 1])
         ax[0].set_title(f"models = {len(learner_info)}/{2 ** len(summary)}", loc="left")
 
@@ -538,7 +538,7 @@ class Rover:
             present_score.append(ps)
             not_present_score.append(nps)
 
-        summary = DataFrame(
+        df = DataFrame(
             {
                 "cov": self.cov_exploring,
                 "coef": coef,
@@ -551,14 +551,10 @@ class Rover:
         )
 
         # derived quantities
-        summary["score_improvement"] = (
-            summary["present_score"] / summary["not_present_score"]
-        )
-        summary["ranking"] = (
-            summary["score_improvement"].rank(ascending=False).astype(int)
-        )
-        coef_lwr = coef - 1.96 * coef_sd
-        coef_upr = coef + 1.96 * coef_sd
-        summary["significant"] = np.sign(coef_lwr * coef_upr) > 0
-        self._summary = summary
-        return summary
+        df["score_improvement"] = df["present_score"] / df["not_present_score"]
+        df["ranking"] = df["score_improvement"].rank(ascending=False).astype(int)
+        df["coef_lwr"] = coef - 1.96 * coef_sd
+        df["coef_upr"] = coef + 1.96 * coef_sd
+        df["significant"] = np.sign(df["coef_lwr"] * df["coef_upr"]) > 0
+        self._summary = df
+        return df
