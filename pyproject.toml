@@ -16,6 +16,13 @@ dependencies = ["regmod==0.1.0", "pplkit", "matplotlib"]
 
 [project.optional-dependencies]
 test = ["pytest"]
+docs = ["sphinx", "sphinx-autodoc-typehints", "furo"]
 
 [project.urls]
 github = "https://github.com/ihmeuw-msca/modrover"
+
+[tool.sphinx]
+project = "modrover"
+author = "IHME Math Sciences"
+copyright = "2023, IHME Math Sciences"
+version = "0.1.0"

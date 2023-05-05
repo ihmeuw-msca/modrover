@@ -10,28 +10,21 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath("."))
-from pathlib import Path
+import tomllib
 
-import modrover
-
-base_dir = Path(modrover.__file__).parent
-
-about = {}
-with (base_dir / "__about__.py").open() as f:
-    exec(f.read(), about)
+with open("../pyproject.toml", "rb") as f:
+    meta = tomllib.load(f)["tool"]["sphinx"]
 
 
 # -- Project information -----------------------------------------------------
 
-project = about["__title__"]
-copyright = about["__copyright__"]
-author = about["__author__"]
+project = meta["project"]
+author = meta["author"]
+copyright = meta["copyright"]
+
 
 # The full version, including alpha/beta/rc tags
-version = about["__version__"]
+version = meta["version"]
 
 
 # -- General configuration ---------------------------------------------------
@@ -93,6 +86,6 @@ html_theme_options = {
         "color-brand-primary": "#6FD8D1",
         "color-brand-content": "#6FD8D1",
         "color-problematic": "#FA9F50",
-        "color-background-secondary": "#202020"
+        "color-background-secondary": "#202020",
     },
 }
