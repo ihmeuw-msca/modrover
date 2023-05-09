@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from modrover.learner import Learner, LearnerID
+from modrover.learner import Learner, LearnerID, ModelStatus
 
 
 class RoverStrategy(ABC):
@@ -107,6 +107,10 @@ class RoverStrategy(ABC):
         Drop if this candidate model performed worse than any of its parent
         Return the remainder
         """
+        curr_layer = filter(
+            lambda learner_id: learners[learner_id].status == ModelStatus.SUCCESS,
+            curr_layer,
+        )
         sorted_learner_ids = sorted(
             curr_layer, key=lambda learner_id: learners[learner_id].score
         )

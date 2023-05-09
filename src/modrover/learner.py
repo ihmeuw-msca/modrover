@@ -239,6 +239,10 @@ class Learner:
             A evaluate determined by the provided model evaluation metric.
 
         """
+        # model = model or self.model
+        # model.data.attach_df(data)
+        # score = np.exp(model.objective(model.opt_coefs).mean())
+        # model.data.detach_df()
         score = self.get_score(
             obs=data[self.obs].to_numpy(),
             pred=self.predict(data, model=model),
@@ -272,12 +276,12 @@ class Learner:
         model.attach_df(data)
         mat = model.mat[0]
         if np.linalg.matrix_rank(mat) < mat.shape[1]:
-            return ModelStatus.SINGULAR
-
-        try:
-            model.fit(**optimizer_options)
-        except:
-            return ModelStatus.SOLVER_FAILED
-
+            status = ModelStatus.SINGULAR
+        else:
+            try:
+                model.fit(**optimizer_options)
+                status = ModelStatus.SUCCESS
+            except:
+                status = ModelStatus.SOLVER_FAILED
         model.data.detach_df()
-        return ModelStatus.SUCCESS
+        return status
