@@ -20,7 +20,7 @@ class Rover:
     Parameters
     ----------
     model_type
-        Type of the model. For example `"gaussian"` or `"poisson"`
+        Type of the model. For example ``"gaussian"`` or ``"poisson"``
     obs
         The name of the column representing observations
     cov_fixed
@@ -28,11 +28,11 @@ class Rover:
     cov_exploring
         A list representing the covariates rover will explore over
     main_param
-        The main parameter where the `cov_fixed` and `cov_exploring` are applied
-        to. By default `main_param=None`, and when the model only have one
-        parameter, `main_param` will be automatically re-assigned to be that
-        parameter. If we have multiple parameters in the model, user has to
-        specify `main_param`.
+        The main parameter where the ``cov_fixed`` and ``cov_exploring`` are
+        applied to. By default ``main_param=None``, and when the model only have
+        one parameter, ``main_param`` will be automatically re-assigned to be
+        that parameter. If we have multiple parameters in the model, user has to
+        specify ``main_param``.
     param_specs
         Parameter settings including, link function, priors, etc
     weights
@@ -71,7 +71,7 @@ class Rover:
 
     @property
     def model_class(self) -> type:
-        """Model class that `model_type` refers to."""
+        """Model class that ``model_type`` refers to."""
         return model_type_dict[self.model_type]
 
     @property
@@ -146,7 +146,7 @@ class Rover:
         ----------
         data
             Training data to fit individual learners on.
-        strategy
+        strategies
             The selection strategy to determine the model tree. Valid strategies
             include "forward", "backward" and "full".
         strategy_options
@@ -155,17 +155,17 @@ class Rover:
             all default options will be used by the strategies.
         top_pct_score
             Only the learners with score that are greater or equal than
-            `best_score * (1 - top_score)` can be selected. When `top_score = 0`
-            only the best model will be selected.
+            ``best_score * (1 - top_score)`` can be selected. When
+            ``top_score = 0`` only the best model will be selected.
         top_pct_learner
-            Only the best `top_pct_learner * num_learners` will be selected.
+            Only the best ``top_pct_learner * num_learners`` will be selected.
         coef_bounds
             User pre-specified bounds for the coefficients. This is a dictionary
             with key as the covariate name and the value as the bounds. The
             learner will be marked valid or not if the coefficients are within
             the bounds. Invalid learners will not be used in ensemble process
-            to create super learner. By default, `coef_bounds=None`, where there
-            is not validation based on the value of the coefficients.
+            to create super learner. By default, ``coef_bounds=None``, where
+            there is not validation based on the value of the coefficients.
 
         """
         self._explore(
@@ -187,39 +187,29 @@ class Rover:
         data
             Testing data to predict
         return_ui
-            If `return_ui` is `True`, a matrix will be returned. The first row
+            If ``return_ui=True``, a matrix will be returned. The first row
             is the point prediction, second and thrid rows are the lower and
             upper bound of the prediction.
         alpha
-            When `return_ui=True`, function will return (1 - `alpha`)
-            uncertainty interval. By default, `alpha=0.05`.
-
-        Returns
-        -------
-        NDArray
-            Super learner predictions
+            When ``return_ui=True``, function will return (1 - ``alpha``)
+            uncertainty interval. By default, ``alpha=0.05``.
 
         """
         return self.super_learner.predict(data, return_ui=return_ui, alpha=alpha)
 
     def plot(self, bins: Optional[int] = None) -> plt.Figure:
         """Plot the result of the exploration. Each panel of the figure
-        corresponding to one covariate in the `cov_exploring`. We plot the
+        corresponding to one covariate in the ``cov_exploring``. We plot the
         spread of the coefficients across all learners along with color
         represents their performance score.
 
         Parameters
         ----------
         bins
-            When `bins=None`, the coefficients will be spread along the y axis
+            When ``bins=None``, the coefficients will be spread along the y axis
             randomly to display the spread. When user pass in an integer, the
             x axis will be divided into bins and the y value will be assigned
             according to the ranking of score within the bin.
-
-        Returns
-        -------
-        plt.Figure
-            Matplotlib figure object.
 
         """
         nrow = len(self.cov_exploring)
