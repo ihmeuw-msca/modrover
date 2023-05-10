@@ -20,15 +20,19 @@ class Rover:
     Parameters
     ----------
     model_type
-        Type of the model. For example `"gaussian"` or `"poisson"`
+        Type of the model. For example ``"gaussian"`` or ``"poisson"``
     obs
         The name of the column representing observations
-    param
-        The parameter we are exploring over
     cov_fixed
         A list representing the covariates are present in every learner
     cov_exploring
         A list representing the covariates rover will explore over
+    main_param
+        The main parameter where the ``cov_fixed`` and ``cov_exploring`` are
+        applied to. By default ``main_param=None``, and when the model only have
+        one parameter, ``main_param`` will be automatically re-assigned to be
+        that parameter. If we have multiple parameters in the model, user has to
+        specify ``main_param``.
     param_specs
         Parameter settings including, link function, priors, etc
     weights
@@ -67,14 +71,19 @@ class Rover:
 
     @property
     def model_class(self) -> type:
+        """Model class that ``model_type`` refers to."""
         return model_type_dict[self.model_type]
 
     @property
     def params(self) -> tuple[str, ...]:
+        """A tuple of parameter names belong to the model class."""
         return self.model_class.param_names
 
     @property
     def variables(self) -> tuple[str, ...]:
+        """A tuple of the variable names belong the model class with full list
+        of covariates.
+        """
         names = []
         for p in self.params:
             names.extend([f"{p}_{v}" for v in self.param_specs[p]["variables"]])
@@ -84,26 +93,33 @@ class Rover:
 
     @property
     def num_vars(self) -> int:
+        """Number of variables with full list of covariates."""
         return len(self.variables)
 
     @property
     def super_learner_id(self) -> tuple[int, ...]:
+        """Learner id for the super learner."""
         return tuple(range(len(self.cov_exploring)))
 
     @property
     def super_learner(self) -> Learner:
+        """Ensembled super learner."""
         if not hasattr(self, "_super_learner"):
             raise NotFittedError("Rover has not been ensembled yet")
         return self._super_learner
 
     @property
     def learner_info(self) -> DataFrame:
+        """A data frame contains important information of fitted learners."""
         if not hasattr(self, "_learner_info"):
             raise NotFittedError("Rover has not been ensemble yet")
         return self._learner_info
 
     @property
     def summary(self) -> DataFrame:
+        """A data frame contains the summary information of explored covariates
+        across all fitted learners.
+        """
         if not hasattr(self, "_summary"):
             raise NotFittedError("Rover has not been ensemble yet")
         return self._summary
@@ -122,26 +138,34 @@ class Rover:
         Explores over all covariate slices as defined by the input strategy, and
         fits the sublearners.
 
-        The superlearner coefficients are determined by the ensemble method
+        The super learner coefficients are determined by the ensemble method
         parameters, and the super learner itself will be created - to be used in
         prediction and summarization.
 
         Parameters
         ----------
         data
-            Training data to fit individual learners on
-        strategy
-            The selection strategy to determine the model tree
-        max_num_models
-            The maximum number of models to consider for ensembling
-        kernel_param
-            The kernel parameter used to determine bias in ensemble weights
+            Training data to fit individual learners on.
+        strategies
+            The selection strategy to determine the model tree. Valid strategies
+            include "forward", "backward" and "full".
+        strategy_options
+            A dictionary with key as the strategy name and value as the option
+            with calling the strategy. By default, `strategy_options=None` where
+            all default options will be used by the strategies.
         top_pct_score
             Only the learners with score that are greater or equal than
-            `best_score * (1 - top_score)` can be selected. When `top_score = 0`
-            only the best model will be selected.
+            ``best_score * (1 - top_score)`` can be selected. When
+            ``top_score = 0`` only the best model will be selected.
         top_pct_learner
-            Only the best `top_pct_learner * num_learners` will be selected.
+            Only the best ``top_pct_learner * num_learners`` will be selected.
+        coef_bounds
+            User pre-specified bounds for the coefficients. This is a dictionary
+            with key as the covariate name and the value as the bounds. The
+            learner will be marked valid or not if the coefficients are within
+            the bounds. Invalid learners will not be used in ensemble process
+            to create super learner. By default, ``coef_bounds=None``, where
+            there is not validation based on the value of the coefficients.
 
         """
         self._explore(
@@ -162,16 +186,32 @@ class Rover:
         ----------
         data
             Testing data to predict
-
-        Returns
-        -------
-        NDArray
-            Super learner predictions
+        return_ui
+            If ``return_ui=True``, a matrix will be returned. The first row
+            is the point prediction, second and thrid rows are the lower and
+            upper bound of the prediction.
+        alpha
+            When ``return_ui=True``, function will return (1 - ``alpha``)
+            uncertainty interval. By default, ``alpha=0.05``.
 
         """
         return self.super_learner.predict(data, return_ui=return_ui, alpha=alpha)
 
     def plot(self, bins: Optional[int] = None) -> plt.Figure:
+        """Plot the result of the exploration. Each panel of the figure
+        corresponding to one covariate in the ``cov_exploring``. We plot the
+        spread of the coefficients across all learners along with color
+        represents their performance score.
+
+        Parameters
+        ----------
+        bins
+            When ``bins=None``, the coefficients will be spread along the y axis
+            randomly to display the spread. When user pass in an integer, the
+            x axis will be divided into bins and the y value will be assigned
+            according to the ranking of score within the bin.
+
+        """
         nrow = len(self.cov_exploring)
         fig, ax = plt.subplots(nrow, 1, figsize=(8, 2 * nrow), sharex=True)
         ax = [ax] if isinstance(ax, plt.Axes) else ax
