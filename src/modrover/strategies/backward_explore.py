@@ -3,6 +3,11 @@ from modrover.strategies.base import RoverStrategy
 
 
 class BackwardExplore(RoverStrategy):
+    """Backward strategy starts from the model with all the covariates that we
+    want to explore and explores backward with less and less covaraites base on
+    the learner performance.
+
+    """
 
     @property
     def base_learner_id(self) -> LearnerID:
@@ -16,23 +21,28 @@ class BackwardExplore(RoverStrategy):
         max_len: int = 1,
     ) -> set[LearnerID]:
         """
-        The backward strategy will select a set of learner IDs numbering one less.
+        The backward strategy will select a set of learner IDs numbering one
+        less. This function will return next set of learner ids corresponding
+        the learers that need to be fitted.
 
-        E.g. if the full set of ids is 1-5, and our current is (0,1,2)
+        E.g. if the full set of ids is 1-5, and our current is (0, 1, 2)
 
-        The downstreams will be (0,1), (0,2)
+        The downstreams will be (0, 1), (0, 2)
 
-        :param curr_layer:
-        :param learners: dictionary storing prior scored models
-        :param min_improvement: learners must out-perform parents by this ratio to continue exploring
-        :param max_len: the number of best learner IDs in this layer to propagate
-        :return:
+        Parameters
+        ----------
+        min_improvement
+            Minimum performance improvement requirement for the learner to be
+            consider qualified to generate the next layer.
+        max_len
+            Maximum number of learner in each layer.
+
         """
         learner_ids = self._filter_curr_layer(
             curr_layer=curr_layer,
             learners=learners,
             min_improvement=min_improvement,
-            max_len=max_len
+            max_len=max_len,
         )
         next_layer = set()
         for learner_id in learner_ids:
