@@ -2,7 +2,7 @@ from contextlib import nullcontext as does_not_raise
 
 import pytest
 
-from modrover.learner import Learner, LearnerID
+from modrover.learner import Learner, LearnerID, ModelStatus
 from modrover.strategies import BackwardExplore, ForwardExplore, FullExplore
 from modrover.strategies.base import RoverStrategy
 
@@ -12,6 +12,7 @@ class DummyModel(Learner):
 
     def __init__(self, score: float = 1.0):
         self.score = score
+        self.status = ModelStatus.SUCCESS
 
 
 class DummyStrategy(RoverStrategy):
