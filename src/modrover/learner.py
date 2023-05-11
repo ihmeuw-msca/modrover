@@ -239,6 +239,10 @@ class Learner:
             A evaluate determined by the provided model evaluation metric.
 
         """
+        # model = model or self.model
+        # model.data.attach_df(data)
+        # score = np.exp(model.objective(model.opt_coefs).mean())
+        # model.data.detach_df()
         score = self.get_score(
             obs=data[self.obs].to_numpy(),
             pred=self.predict(data, model=model),
@@ -259,7 +263,6 @@ class Learner:
             data=data,
             param_specs=self.param_specs,
         )
-        self.model = model
         return model
 
     def _fit(
@@ -272,12 +275,26 @@ class Learner:
         model.attach_df(data)
         mat = model.mat[0]
         if np.linalg.matrix_rank(mat) < mat.shape[1]:
-            return ModelStatus.SINGULAR
+            status = ModelStatus.SINGULAR
+        else:
+            try:
+                model.fit(**optimizer_options)
+                status = ModelStatus.SUCCESS
+            except:
+                status = ModelStatus.SOLVER_FAILED
+        model = _detach_df(model)
+        return status
 
-        try:
-            model.fit(**optimizer_options)
-        except:
-            return ModelStatus.SOLVER_FAILED
 
-        model.data.detach_df()
-        return ModelStatus.SUCCESS
+def _detach_df(model: RegmodModel) -> RegmodModel:
+    """Detach data and all the arrays from the regmod model."""
+    model.data.detach_df()
+    del model.mat
+    del model.uvec
+    del model.gvec
+    del model.linear_uvec
+    del model.linear_gvec
+    del model.linear_umat
+    del model.linear_gmat
+
+    return model
