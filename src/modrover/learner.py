@@ -35,8 +35,7 @@ class Learner:
     obs
         Name corresponding to the observation column in the data frame
     main_param
-        The main parameter we are exploring. This will be used when we create
-        the prediction.
+        The main parameter we are exploring. This is aligned with the :class:`modrover.rover.Rover` class.
     param_specs
         Parameter settings for the regmod model
     weights
@@ -172,7 +171,7 @@ class Learner:
         alpha: float = 0.05,
     ) -> NDArray:
         """Generate prediction using regmod model. This function will return
-        a prediction for the given data with or without uncertainty.
+        predictions for the :code:`main_param` with given data.
 
         Parameters
         ----------
