@@ -26,7 +26,7 @@ class ModelStatus(Enum):
 
 
 class Learner:
-    """Main model class for Rover explore.
+    """Individual learner class for one specific covariate configuration.
 
     Parameters
     ----------
@@ -34,6 +34,9 @@ class Learner:
         Regmod model constructor
     obs
         Name corresponding to the observation column in the data frame
+    main_param
+        The main parameter we are exploring. This will be used when we create
+        the prediction.
     param_specs
         Parameter settings for the regmod model
     weights
@@ -75,6 +78,7 @@ class Learner:
 
     @property
     def coef(self) -> Optional[NDArray]:
+        """Coefficients in the regmod model."""
         return self.model.opt_coefs
 
     @coef.setter
@@ -85,6 +89,7 @@ class Learner:
 
     @property
     def vcov(self) -> Optional[NDArray]:
+        """Variance-covarianace matrix for the coefficients in the regmod model."""
         return self.model.opt_vcov
 
     @vcov.setter
@@ -121,6 +126,8 @@ class Learner:
             Which column names to iterate over for cross validation. If it is
             `None`, insample performance score will be used to evaluate the
             model.
+        **optimizer_options
+            Extra options for the optimizer.
 
         """
         if self.status != ModelStatus.NOT_FITTED:
@@ -153,7 +160,7 @@ class Learner:
         # Fit final model with all data included
         self.status = self._fit(data, **optimizer_options)
 
-        # If holdout cols not provided, use in sample evaluate for the full data model
+        # If holdout cols not provided, use in-sample evaluate for the full data model
         if not holdouts:
             self.score = self.evaluate(data)
 
@@ -164,23 +171,23 @@ class Learner:
         return_ui: bool = False,
         alpha: float = 0.05,
     ) -> NDArray:
-        """Wraps regmod's predict method to avoid modifying input dataset.
-
-        Can be removed if regmod models use a functionally pure predict
-        function, otherwise we will raise SettingWithCopyWarnings repeatedly.
+        """Generate prediction using regmod model. This function will return
+        a prediction for the given data with or without uncertainty.
 
         Parameters
         ----------
         data
             A dataset to generate predictions from
         model
-            A fitted RegmodModel. If it is `None`, will use the overall model
+            A fitted RegmodModel. If it is ``None``, will use the overall model
             rather than the cross-validation model.
-
-        Returns
-        -------
-        NDArray
-            Prediction with the model.
+        return_ui
+            If ``return_ui=True``, a matrix will be returned. The first row
+            is the point prediction, second and thrid rows are the lower and
+            upper bound of the prediction.
+        alpha
+            When ``return_ui=True``, function will return (1 - ``alpha``)
+            uncertainty interval. By default, ``alpha=0.05``.
 
         """
         model = model or self.model
@@ -220,7 +227,7 @@ class Learner:
         return pred
 
     def evaluate(self, data: DataFrame, model: Optional[RegmodModel] = None) -> float:
-        """Given a model and a test set, generate an aggregate evaluate.
+        """Given a model and a test set, generate a performance score.
 
         Score is based on the provided evaluation metric, comparing the
         difference between observed and predicted values.
@@ -230,16 +237,11 @@ class Learner:
         data
             The data set to generate predictions from
         model
-            The fitted model to set predictions on. If `None` will use the
+            The fitted model to set predictions on. If ``None`` will use the
             overall model rather than the cross-validation model.
 
-        Returns
-        -------
-        float
-            A evaluate determined by the provided model evaluation metric.
-
         """
-        # model = model or self.model
+        model = model or self.model
         # model.data.attach_df(data)
         # score = np.exp(model.objective(model.opt_coefs).mean())
         # model.data.detach_df()
