@@ -263,7 +263,6 @@ class Learner:
             data=data,
             param_specs=self.param_specs,
         )
-        self.model = model
         return model
 
     def _fit(
@@ -283,5 +282,19 @@ class Learner:
                 status = ModelStatus.SUCCESS
             except:
                 status = ModelStatus.SOLVER_FAILED
-        model.data.detach_df()
+        model = _detach_df(model)
         return status
+
+
+def _detach_df(model: RegmodModel) -> RegmodModel:
+    """Detach data and all the arrays from the regmod model."""
+    model.data.detach_df()
+    del model.mat
+    del model.uvec
+    del model.gvec
+    del model.linear_uvec
+    del model.linear_gvec
+    del model.linear_umat
+    del model.linear_gmat
+
+    return model
