@@ -12,8 +12,6 @@ from regmod.models import Model as RegmodModel
 from regmod.variable import Variable
 from scipy.stats import norm
 
-from .globals import get_rmse
-
 LearnerID = tuple[int, ...]
 
 
@@ -52,7 +50,7 @@ class Learner:
         main_param: str,
         param_specs: dict[str, dict],
         weights: str = "weights",
-        get_score: Callable = get_rmse,
+        get_score: Optional[Callable] = None,
     ) -> None:
         self.model_class = model_class
         self.obs = obs
@@ -237,13 +235,15 @@ class Learner:
 
         """
         model = model or self.model
-        # model.data.attach_df(data)
-        # score = np.exp(model.objective(model.opt_coefs).mean())
-        # model.data.detach_df()
-        score = self.get_score(
-            obs=data[self.obs].to_numpy(),
-            pred=self.predict(data, model=model),
-        )
+        if self.get_score is None:
+            model.attach_df(data)
+            score = np.exp(-model.objective(model.opt_coefs) / model.data.weights.sum())
+            model = _detach_df(model)
+        else:
+            score = self.get_score(
+                obs=data[self.obs].to_numpy(),
+                pred=self.predict(data, model=model),
+            )
         return score
 
     def _get_model(self) -> RegmodModel:
