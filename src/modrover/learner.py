@@ -144,24 +144,20 @@ class Learner:
                     self._cv_scores[holdout] = self.evaluate(
                         data_group.get_group(1), self._cv_models[holdout]
                     )
-            cv_scores = [
-                score
-                for holdout, score in self._cv_scores.items()
-                if self._cv_status[holdout] == ModelStatus.SUCCESS
-            ]
-            if len(cv_scores) == 0:
-                self.status = ModelStatus.CV_FAILED
-                return
-
-            # Learner score is average score across each k fold
-            self.score = np.mean(cv_scores)
+                else:
+                    self.status = ModelStatus.CV_FAILED
+                    break
+            if self.status != ModelStatus.CV_FAILED:
+                self.score = np.mean(list(self._cv_scores.values()))
+            # clear all cv models for storage efficiency
+            self._cv_models.clear()
 
         # Fit final model with all data included
-        self.status = self._fit(data, **optimizer_options)
-
-        # If holdout cols not provided, use in-sample evaluate for the full data model
-        if not holdouts:
-            self.score = self.evaluate(data)
+        if self.status != ModelStatus.CV_FAILED:
+            self.status = self._fit(data, **optimizer_options)
+            # If holdout cols not provided, use in-sample evaluate for the full data model
+            if self.status == ModelStatus.SUCCESS and (not holdout):
+                self.score = self.evaluate(data)
 
     def predict(
         self,
