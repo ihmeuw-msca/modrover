@@ -3,13 +3,17 @@ from abc import ABC, abstractmethod
 from modrover.learner import Learner, LearnerID, ModelStatus
 
 
-class RoverStrategy(ABC):
-    """
-    An abstract base class representing a valid Rover strategy.
+class Strategy(ABC):
+    """An abstract base class representing a valid Rover strategy.
 
-    The strategy is responsible for selecting the next set of LearnerIDs, determining the next
-    layer of individual learners that Rover will fit. Fitting learners and storing results
-    is managed by Rover itself.
+    The strategy is responsible for selecting the next set of LearnerIDs,
+    determining the next layer of individual learners that Rover will fit.
+    Fitting learners and storing results is managed by Rover itself.
+
+    Parameters
+    ----------
+    num_covs
+        Number of exploring covaraites.
 
     """
 
@@ -28,7 +32,18 @@ class RoverStrategy(ABC):
         learners: dict[LearnerID, Learner],
         **kwargs,
     ) -> set[LearnerID]:
-        """Abstract method to generate the next set of learner IDs."""
+        """Abstract method to generate the next set of learner ids.
+
+        Parameters
+        ----------
+        curr_layer
+            Current explored set of learner ids.
+        learners
+            A dictionary contains all fitted learners.
+        **kwargs
+            Other key word arguments.
+
+        """
 
     @abstractmethod
     def _get_upstream_learner_ids(
@@ -38,21 +53,18 @@ class RoverStrategy(ABC):
     ) -> set[LearnerID]:
         """Given a learnerID, generate the upstream nodes.
 
-        Regardless of the selected strategy, we should be able to guarantee at least one
-        of the upstreams has already been visited if we are at a particular node.
+        Regardless of the selected strategy, we should be able to guarantee at
+        least one of the upstreams has already been visited if we are at a
+        particular node.
 
-        Note that this is going to search the opposite direction of the specified strategy.
-        e.g. for DownExplore, the upstream IDs are going to be parents
+        Note that this is going to search the opposite direction of the
+        specified strategy.  e.g. for DownExplore, the upstream IDs are going to
+        be parents
+
         """
 
     def _as_learner_id(self, cov_ids: tuple[int, ...]) -> LearnerID:
-        """
-        Validate the provided covariate_id set by the number of total covariates.
-
-        :param cov_ids: Iterable of integer cov_ids
-        :param num_covs: Total number of covariates
-        :return: Validated cov_ids and num_covs
-        """
+        """Validate the provided covariate_id set by the number of total covariates."""
         # Deduplicate cov_ids
         cov_ids = set(cov_ids)
         # Sort the covariate ids since we need them in a fixed order for mapping later
@@ -65,14 +77,7 @@ class RoverStrategy(ABC):
         return tuple(cov_ids)
 
     def _get_learner_id_children(self, learner_id: LearnerID) -> set[LearnerID]:
-        """
-        Create a new set of child covariate ID combinations based on the current one.
-        As an example, if we have 5 total explore covariates 0-4, and our current covariate ID
-        is (0,1,2), this will return
-        [(0,1,2,3), (0,1,2,4)]
-        :param num_covs: total number of covariates represented
-        :return: A list of LearnerID classes wrapping the child covariate ID tuples
-        """
+        """Create a new set of child covariate id combinations based on the current one."""
         all_covs_ids = set(range(self.num_covs))
         remaining_cov_ids = all_covs_ids - set(learner_id)
         children = {
@@ -81,12 +86,7 @@ class RoverStrategy(ABC):
         return children
 
     def _get_learner_id_parents(self, learner_id: LearnerID) -> set[LearnerID]:
-        """
-        Create a parent LearnerID class with one less covariate than the current modelid.
-        As an example, if our current covariate_id tuple is (0,1,2),
-        this function will return [(0,1), (0,2), (1, 2)]
-        :return:
-        """
+        """Create a parent LearnerID class with one less covariate than the current modelid."""
         parents = {
             self._as_learner_id((*learner_id[:i], *learner_id[(i + 1) :]))
             for i in range(len(learner_id))

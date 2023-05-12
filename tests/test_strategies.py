@@ -3,8 +3,8 @@ from contextlib import nullcontext as does_not_raise
 import pytest
 
 from modrover.learner import Learner, LearnerID, ModelStatus
-from modrover.strategies import BackwardExplore, ForwardExplore, FullExplore
-from modrover.strategies.base import RoverStrategy
+from modrover.strategies import Backward, Forward, Full
+from modrover.strategies.base import Strategy
 
 
 class DummyModel(Learner):
@@ -15,7 +15,7 @@ class DummyModel(Learner):
         self.status = ModelStatus.SUCCESS
 
 
-class DummyStrategy(RoverStrategy):
+class DummyStrategy(Strategy):
     @property
     def base_learner_id(self) -> LearnerID:
         return (0,)
@@ -56,7 +56,7 @@ def test_basic_filtering():
 
 def test_parent_ratio():
     """Test that we can drop learner ids with better performing upstreams."""
-    strategy = BackwardExplore(3)
+    strategy = Backward(3)
 
     # Initialize a set of model ids and their children
     lid_1 = (0, 1)
@@ -81,7 +81,7 @@ def test_parent_ratio():
 
 
 def test_generate_forward_layer():
-    strategy = ForwardExplore(4)
+    strategy = Forward(4)
     lid_1 = (0, 1)
     lid_2 = (0, 2)
 
@@ -108,7 +108,7 @@ def test_generate_forward_layer():
 
 
 def test_generate_backward_layer():
-    strategy = BackwardExplore(4)
+    strategy = Backward(4)
     lid_1 = (0, 1)
     lid_2 = (0, 2)
 
@@ -131,7 +131,7 @@ def test_generate_backward_layer():
 
 
 def test_full_explore():
-    full_strategy = FullExplore(3)
+    full_strategy = Full(3)
 
     second_layer = full_strategy.get_next_layer(full_strategy.first_layer, dict())
     expected_combos = {
@@ -163,7 +163,7 @@ def test_full_explore():
     ],
 )
 def test_as_learner_id(input_cov_id, validated_cov_id, expectation):
-    strategy = FullExplore(3)
+    strategy = Full(3)
     with expectation:
         learner_id = strategy._as_learner_id(input_cov_id)
         if validated_cov_id:
@@ -171,7 +171,7 @@ def test_as_learner_id(input_cov_id, validated_cov_id, expectation):
 
 
 def test_get_learner_id_children():
-    strategy = FullExplore(5)
+    strategy = Full(5)
     # Check children generation
     learner_id = strategy._as_learner_id((1, 2, 3))
     children = strategy._get_learner_id_children(learner_id)
@@ -181,13 +181,13 @@ def test_get_learner_id_children():
     assert expected_children == children
 
     # Check no more children generated when all covariates are represented
-    strategy = FullExplore(3)
+    strategy = Full(3)
     learner_id = strategy._as_learner_id((0, 1, 2))
     assert not any(strategy._get_learner_id_children(learner_id))
 
 
 def test_learnerid_parents():
-    strategy = FullExplore(5)
+    strategy = Full(5)
     # Check parent generation
     learner_id = strategy._as_learner_id((1, 2, 3))
     parents = strategy._get_learner_id_parents(learner_id)
