@@ -1,13 +1,13 @@
-from modrover.strategies.backward_explore import BackwardExplore
-from modrover.strategies.forward_explore import ForwardExplore
-from modrover.strategies.full_explore import FullExplore
+from modrover.strategies.backward import Backward
+from modrover.strategies.forward import Forward
+from modrover.strategies.full import Full
 
 
 def get_strategy(strategy_name: str):
     strategy_type_dict = {
-        "full": FullExplore,
-        "forward": ForwardExplore,
-        "backward": BackwardExplore,
+        "full": Full,
+        "forward": Forward,
+        "backward": Backward,
     }
     try:
         return strategy_type_dict[strategy_name]

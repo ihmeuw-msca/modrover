@@ -1,8 +1,8 @@
 from modrover.learner import Learner, LearnerID
-from modrover.strategies.base import RoverStrategy
+from modrover.strategies.base import Strategy
 
 
-class ForwardExplore(RoverStrategy):
+class Forward(Strategy):
     """Forward strategy starts from the model with only the :code:`cov_fixed`
     and explores forwards with more and more covariates base on the learner
     performance.
@@ -64,6 +64,6 @@ class ForwardExplore(RoverStrategy):
         learners: dict[LearnerID, Learner],
     ) -> set[LearnerID]:
         """Return the possible previous nodes.
-        For ForwardExplore, this is the current learner id's parents.
+        For Forward, this is the current learner id's parents.
         """
         return self._get_learner_id_parents(learner_id) & set(learners.keys())

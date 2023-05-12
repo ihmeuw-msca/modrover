@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from modrover.learner import Learner, LearnerID, ModelStatus
 
 
-class RoverStrategy(ABC):
+class Strategy(ABC):
     """An abstract base class representing a valid Rover strategy.
 
     The strategy is responsible for selecting the next set of LearnerIDs,

@@ -1,10 +1,10 @@
 from itertools import combinations
 
 from modrover.learner import Learner, LearnerID
-from modrover.strategies.base import RoverStrategy
+from modrover.strategies.base import Strategy
 
 
-class FullExplore(RoverStrategy):
+class Full(Strategy):
     """Full strategy explore every possible covariate combinations.
 
     Parameters

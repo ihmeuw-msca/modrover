@@ -1,8 +1,8 @@
 from modrover.learner import Learner, LearnerID
-from modrover.strategies.base import RoverStrategy
+from modrover.strategies.base import Strategy
 
 
-class BackwardExplore(RoverStrategy):
+class Backward(Strategy):
     """Backward strategy starts from the model with all the covariates that we
     want to explore and explores backward with less and less covaraites base on
     the learner performance.
@@ -64,6 +64,6 @@ class BackwardExplore(RoverStrategy):
         learners: dict[LearnerID, Learner],
     ) -> set[LearnerID]:
         """Return the possible previous nodes.
-        For BackwardExplore, this is the current learner id's children.
+        For Backward, this is the current learner id's children.
         """
         return self._get_learner_id_children(learner_id) & set(learners.keys())
