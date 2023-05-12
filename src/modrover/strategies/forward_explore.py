@@ -7,6 +7,11 @@ class ForwardExplore(RoverStrategy):
     and explores forwards with more and more covariates base on the learner
     performance.
 
+    Parameters
+    ----------
+    num_covs
+        Number of exploring covaraites.
+
     """
 
     @property
@@ -31,6 +36,10 @@ class ForwardExplore(RoverStrategy):
 
         Parameters
         ----------
+        curr_layer
+            Current explored set of learner ids.
+        learners
+            A dictionary contains all fitted learners.
         min_improvement
             Minimum performance improvement requirement for the learner to be
             consider qualified to generate the next layer.

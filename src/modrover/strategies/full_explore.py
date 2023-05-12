@@ -5,7 +5,14 @@ from modrover.strategies.base import RoverStrategy
 
 
 class FullExplore(RoverStrategy):
-    """Full strategy explore every possible covariate combinations."""
+    """Full strategy explore every possible covariate combinations.
+
+    Parameters
+    ----------
+    num_covs
+        Number of exploring covaraites.
+
+    """
 
     @property
     def base_learner_id(self) -> LearnerID:
@@ -28,13 +35,20 @@ class FullExplore(RoverStrategy):
         return set(second_layer)
 
     def get_next_layer(
-        self, curr_layer: set[LearnerID], learners: dict[LearnerID, Learner], **kwargs
+        self, curr_layer: set[LearnerID], learners: dict[LearnerID, Learner]
     ) -> set[LearnerID]:
         """Find every single possible learner ID combination, return in a
         single layer. If the :code:`curr_layer=first_layer`, it will return the
         :code:`second_layer` and if the :code:`curr_layer=second_layer`, it will
         return an empty layer. The first layer and the second layer together
         cover all possible combinations.
+
+        Parameters
+        ----------
+        curr_layer
+            Current explored set of learner ids.
+        learners
+            A dictionary contains all fitted learners.
 
         """
         if curr_layer == self.first_layer:
