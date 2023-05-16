@@ -441,7 +441,7 @@ class Rover:
         learner_ids, weights = df["learner_id"], df["weight"]
         coefs = df[list(self.variables)].to_numpy()
         super_coef = coefs.T.dot(weights)
-        super_vcov = self._get_super_vcov(learner_ids, weights)
+        super_vcov = self._get_super_vcov(learner_ids, weights, super_coef)
 
         super_learner = self._get_learner(
             learner_id=self.super_learner_id, use_cache=False
@@ -503,14 +503,19 @@ class Rover:
         return super_coef
 
     def _get_super_vcov(
-        self, learner_ids: list[LearnerID], weights: NDArray
+        self,
+        learner_ids: list[LearnerID],
+        weights: NDArray,
+        super_coef: NDArray,
     ) -> NDArray:
         super_vcov = np.zeros((self.num_vars, self.num_vars))
         for learner_id, weight in zip(learner_ids, weights):
+            learner = self.learners[learner_id]
             coef_index = self._get_coef_index(learner_id)
-            super_vcov[np.ix_(coef_index, coef_index)] += (
-                weight * self.learners[learner_id].vcov
+            super_vcov[np.ix_(coef_index, coef_index)] += weight * (
+                learner.vcov + np.outer(learner.coef, learner.coef)
             )
+        super_vcov -= np.outer(super_coef, super_coef)
         return super_vcov
 
     def _get_coef_index(self, learner_id: LearnerID) -> list[int]:

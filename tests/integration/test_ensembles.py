@@ -121,5 +121,6 @@ def test_get_super_learner(mock_rover):
         super_learner.coef, mock_rover._get_super_coef(learner_ids, weights)
     )
     assert np.allclose(
-        super_learner.vcov, mock_rover._get_super_vcov(learner_ids, weights)
+        super_learner.vcov,
+        mock_rover._get_super_vcov(learner_ids, weights, super_learner.coef),
     )
