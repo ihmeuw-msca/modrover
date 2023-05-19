@@ -227,8 +227,8 @@ class Rover:
             bins = np.linspace(cmin, cmax, bins + 1)
 
         summary = self.summary
-        score = learner_info["score"].to_numpy()
-        vmin, vmax = score.min(), score.max()
+        score_scaled = learner_info["score_scaled"].to_numpy()
+        vmin, vmax = score_scaled.min(), score_scaled.max()
         highlight_index = {
             "final": learner_info["weight"] > 0,
             "invalid": ~learner_info["valid"],
@@ -262,7 +262,7 @@ class Rover:
                 coef,
                 coef_jitter,
                 alpha=0.2,
-                c=score,
+                c=score_scaled,
                 edgecolors="none",
                 vmin=vmin,
                 vmax=vmax,
@@ -427,6 +427,16 @@ class Rover:
                     **options,
                 )
                 curr_ids = next_ids
+
+        # scale score
+        score_max = max(
+            learner.score
+            for learner in self.learners.values()
+            if learner.status == ModelStatus.SUCCESS
+        )
+        for learner in self.learners.values():
+            if learner.status == ModelStatus.SUCCESS:
+                learner.score_scaled = learner.score / score_max
 
     # construct super learner ==================================================
     def _get_super_learner(
