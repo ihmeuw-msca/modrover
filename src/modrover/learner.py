@@ -66,7 +66,6 @@ class Learner:
         # initialize null model
         self.model = self._get_model()
         self.score = np.nan
-        self.score_scaled = np.nan
         self.status = ModelStatus.NOT_FITTED
 
         # initialize cross validation model

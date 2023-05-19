@@ -428,16 +428,6 @@ class Rover:
                 )
                 curr_ids = next_ids
 
-        # scale score
-        score_max = max(
-            learner.score
-            for learner in self.learners.values()
-            if learner.status == ModelStatus.SUCCESS
-        )
-        for learner in self.learners.values():
-            if learner.status == ModelStatus.SUCCESS:
-                learner.score_scaled = learner.score / score_max
-
     # construct super learner ==================================================
     def _get_super_learner(
         self,
@@ -496,6 +486,8 @@ class Rover:
         df.loc[df["valid"], "weight"] = self._get_super_weights(
             df.loc[df["valid"], "learner_id"], top_pct_score, top_pct_learner
         )
+
+        df["score_scaled"] = df["score"] / df["score"].dropna().max()
         self._learner_info = df
         return df
 
