@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "modrover"
-version = "0.1.0"
+version = "0.1.1"
 description = "Model space explorer for inference and prediction"
 readme = "README.rst"
 requires-python = ">=3.10"
@@ -12,7 +12,13 @@ license = { file = "LICENSE" }
 authors = [
     { name = "IHME Math Sciences", email = "ihme.math.sciences@gmail.com" },
 ]
-dependencies = ["regmod==0.1.0", "pplkit", "matplotlib"]
+dependencies = [
+    "jax[cpu]==0.4.5",
+    "jaxlib==0.4.4",
+    "regmod==0.1.0",
+    "pplkit",
+    "matplotlib",
+]
 
 [project.optional-dependencies]
 test = ["pytest"]
@@ -25,4 +31,4 @@ github = "https://github.com/ihmeuw-msca/modrover"
 project = "modrover"
 author = "IHME Math Sciences"
 copyright = "2023, IHME Math Sciences"
-version = "0.1.0"
+version = "0.1.1"

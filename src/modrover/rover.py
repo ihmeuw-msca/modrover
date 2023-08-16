@@ -227,8 +227,8 @@ class Rover:
             bins = np.linspace(cmin, cmax, bins + 1)
 
         summary = self.summary
-        score = learner_info["score"].to_numpy()
-        vmin, vmax = score.min(), score.max()
+        score_scaled = learner_info["score_scaled"].to_numpy()
+        vmin, vmax = score_scaled.min(), score_scaled.max()
         highlight_index = {
             "final": learner_info["weight"] > 0,
             "invalid": ~learner_info["valid"],
@@ -262,7 +262,7 @@ class Rover:
                 coef,
                 coef_jitter,
                 alpha=0.2,
-                c=score,
+                c=score_scaled,
                 edgecolors="none",
                 vmin=vmin,
                 vmax=vmax,
@@ -441,7 +441,7 @@ class Rover:
         learner_ids, weights = df["learner_id"], df["weight"]
         coefs = df[list(self.variables)].to_numpy()
         super_coef = coefs.T.dot(weights)
-        super_vcov = self._get_super_vcov(learner_ids, weights)
+        super_vcov = self._get_super_vcov(learner_ids, weights, super_coef)
 
         super_learner = self._get_learner(
             learner_id=self.super_learner_id, use_cache=False
@@ -486,6 +486,8 @@ class Rover:
         df.loc[df["valid"], "weight"] = self._get_super_weights(
             df.loc[df["valid"], "learner_id"], top_pct_score, top_pct_learner
         )
+
+        df["score_scaled"] = df["score"] / df["score"].dropna().max()
         self._learner_info = df
         return df
 
@@ -503,14 +505,19 @@ class Rover:
         return super_coef
 
     def _get_super_vcov(
-        self, learner_ids: list[LearnerID], weights: NDArray
+        self,
+        learner_ids: list[LearnerID],
+        weights: NDArray,
+        super_coef: NDArray,
     ) -> NDArray:
         super_vcov = np.zeros((self.num_vars, self.num_vars))
         for learner_id, weight in zip(learner_ids, weights):
+            learner = self.learners[learner_id]
             coef_index = self._get_coef_index(learner_id)
-            super_vcov[np.ix_(coef_index, coef_index)] += (
-                weight * self.learners[learner_id].vcov
+            super_vcov[np.ix_(coef_index, coef_index)] += weight * (
+                learner.vcov + np.outer(learner.coef, learner.coef)
             )
+        super_vcov -= np.outer(super_coef, super_coef)
         return super_vcov
 
     def _get_coef_index(self, learner_id: LearnerID) -> list[int]:

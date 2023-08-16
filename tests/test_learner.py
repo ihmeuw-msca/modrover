@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import pytest
-
 from modrover.globals import model_type_dict
 from modrover.learner import Learner, ModelStatus
 
@@ -36,7 +35,7 @@ def test_model_init(model_specs):
     # Check that model is "new"
     assert learner.status == ModelStatus.NOT_FITTED
     assert learner.coef is None
-    assert learner.score is None
+    assert np.isnan(learner.score)
 
 
 def test_model_fit(dataset, model_specs):
