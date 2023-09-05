@@ -154,7 +154,7 @@ class Learner:
         if self.status != ModelStatus.CV_FAILED:
             self.status = self._fit(data, **optimizer_options)
             # If holdout cols not provided, use in-sample evaluate for the full data model
-            if self.status == ModelStatus.SUCCESS and (not holdout):
+            if self.status == ModelStatus.SUCCESS and (not holdouts):
                 self.score = self.evaluate(data)
 
     def predict(
