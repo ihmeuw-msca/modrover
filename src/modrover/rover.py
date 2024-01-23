@@ -557,28 +557,25 @@ class Rover:
             self.learner_info["status"] == ModelStatus.SUCCESS
         ]
         learner_scores = dict(zip(learner_info["learner_id"], learner_info["score"]))
-
-        all_covs = self.cov_fixed + self.cov_exploring
         # ensemble info
-        # TODO: Isn't this always all covariates? for the super learner?
         coef_index = [
-            variables.index(f"{self.main_param}_{cov}") for cov in all_covs
+            variables.index(f"{self.main_param}_{cov}") for cov in self.cov_exploring
         ]
         coef = self.super_learner.coef[coef_index]
         coef_sd = np.sqrt(np.diag(self.super_learner.vcov)[coef_index])
         # number of models the covariate is present
         pct_present = [
             (learner_info[f"{self.main_param}_{cov}"] != 0.0).sum() / len(learner_info)
-            for cov in all_covs
+            for cov in self.cov_exploring
         ]
         # score when only the selected covariate is present
-        single_score = [np.nan] * len(self.cov_fixed) + [
+        single_score = [
             learner_scores.get((i,), np.nan) for i in range(len(self.cov_exploring))
         ]
         # average score when selected covariate is present or not
         present_score = []
         not_present_score = []
-        for cov in all_covs:
+        for cov in self.cov_exploring:
             present_index = learner_info[f"{self.main_param}_{cov}"] != 0.0
             ps, nps = 0.0, 0.0
             if any(present_index):
@@ -590,7 +587,7 @@ class Rover:
 
         df = DataFrame(
             {
-                "cov": all_covs,
+                "cov": self.cov_exploring,
                 "coef": coef,
                 "coef_sd": coef_sd,
                 "pct_present": pct_present,
