@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Callable, Optional
+from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -52,10 +52,10 @@ class Rover:
         obs: str,
         cov_fixed: list[str],
         cov_exploring: list[str],
-        main_param: Optional[str] = None,
-        param_specs: Optional[dict[str, dict]] = None,
+        main_param: str | None = None,
+        param_specs: dict[str, dict] | None = None,
         weights: str = "weights",
-        holdouts: Optional[list[str]] = None,
+        holdouts: list[str] | None = None,
         get_score: Callable = get_rmse,
     ) -> None:
         self.model_type = self._as_model_type(model_type)
@@ -130,10 +130,10 @@ class Rover:
         self,
         data: DataFrame,
         strategies: list[str],
-        strategy_options: Optional[dict] = None,
+        strategy_options: dict | None = None,
         top_pct_score: float = 0.1,
         top_pct_learner: float = 1.0,
-        coef_bounds: Optional[dict[str, tuple[float, float]]] = None,
+        coef_bounds: dict[str, tuple[float, float]] | None = None,
     ) -> None:
         """Fits the ensembled super learner.
 
@@ -201,7 +201,7 @@ class Rover:
             data, return_ui=return_ui, alpha=alpha
         )
 
-    def plot(self, bins: Optional[int] = None) -> plt.Figure:
+    def plot(self, bins: int | None = None) -> plt.Figure:
         """Plot the result of the exploration. Each panel of the figure
         corresponding to one covariate in the ``cov_exploring``. We plot the
         spread of the coefficients across all learners along with color
@@ -354,7 +354,7 @@ class Rover:
             )
         return list(cov_fixed), list(cov_exploring)
 
-    def _as_main_param(self, main_param: Optional[str]) -> str:
+    def _as_main_param(self, main_param: str | None) -> str:
         params = self.params
         if main_param is not None:
             if main_param not in params:
@@ -371,7 +371,7 @@ class Rover:
         return main_param
 
     def _as_param_specs(
-        self, param_specs: Optional[dict[str, dict]]
+        self, param_specs: dict[str, dict] | None
     ) -> dict[str, dict]:
         param_specs = param_specs or {}
         for param in self.params:
@@ -415,7 +415,7 @@ class Rover:
         self,
         data: DataFrame,
         strategies: list[str],
-        strategy_options: Optional[dict] = None,
+        strategy_options: dict | None = None,
     ):
         """Explore the entire tree of learners"""
         strategy_options = strategy_options or {}
@@ -447,7 +447,7 @@ class Rover:
         self,
         top_pct_score: float,
         top_pct_learner: float,
-        coef_bounds: Optional[dict[str, tuple[float, float]]],
+        coef_bounds: dict[str, tuple[float, float]] | None,
     ) -> Learner:
         """Call at the end of fit, so model is configured at the end of fit."""
         df = self._get_learner_info(top_pct_score, top_pct_learner, coef_bounds)
@@ -470,7 +470,7 @@ class Rover:
         self,
         top_pct_score: float = 0.1,
         top_pct_learner: float = 1.0,
-        coef_bounds: Optional[dict[str, tuple[float, float]]] = None,
+        coef_bounds: dict[str, tuple[float, float]] | None = None,
     ) -> DataFrame:
         df = DataFrame(
             columns=["learner_id", "status"] + list(self.variables) + ["score"]

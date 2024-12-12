@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from enum import Enum
-from typing import Callable, Optional
+from typing import Callable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -50,7 +50,7 @@ class Learner:
         main_param: str,
         param_specs: dict[str, dict],
         weights: str = "weights",
-        get_score: Optional[Callable] = None,
+        get_score: Callable | None = None,
     ) -> None:
         self.model_class = model_class
         self.obs = obs
@@ -76,7 +76,7 @@ class Learner:
         self._cv_status = defaultdict(lambda: ModelStatus.NOT_FITTED)
 
     @property
-    def coef(self) -> Optional[NDArray]:
+    def coef(self) -> NDArray | None:
         """Coefficients in the regmod model."""
         return self.model.opt_coefs
 
@@ -87,7 +87,7 @@ class Learner:
         self.model.opt_coefs = coef
 
     @property
-    def vcov(self) -> Optional[NDArray]:
+    def vcov(self) -> NDArray | None:
         """Variance-covarianace matrix for the coefficients in the regmod model."""
         return self.model.opt_vcov
 
@@ -100,7 +100,7 @@ class Learner:
     def fit(
         self,
         data: DataFrame,
-        holdouts: Optional[list[str]] = None,
+        holdouts: list[str] | None = None,
         **optimizer_options,
     ) -> None:
         """
@@ -162,7 +162,7 @@ class Learner:
     def predict(
         self,
         data: DataFrame,
-        model: Optional[RegmodModel] = None,
+        model: RegmodModel | None = None,
         return_ui: bool = False,
         alpha: float = 0.05,
     ) -> NDArray:
@@ -224,7 +224,7 @@ class Learner:
         return pred
 
     def evaluate(
-        self, data: DataFrame, model: Optional[RegmodModel] = None
+        self, data: DataFrame, model: RegmodModel | None = None
     ) -> float:
         """Given a model and a test set, generate a performance score.
 
@@ -273,7 +273,7 @@ class Learner:
     def _fit(
         self,
         data: DataFrame,
-        model: Optional[RegmodModel] = None,
+        model: RegmodModel | None = None,
         **optimizer_options,
     ) -> ModelStatus:
         model = model or self.model
