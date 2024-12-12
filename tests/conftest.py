@@ -36,7 +36,9 @@ class MockRover(Rover):
     ):
         self.model_type = self._as_model_type(model_type)
         self.main_param = self._as_main_param(main_param)
-        self.cov_fixed, self.cov_exploring = self._as_cov(cov_fixed, cov_exploring)
+        self.cov_fixed, self.cov_exploring = self._as_cov(
+            cov_fixed, cov_exploring
+        )
         self.param_specs = self._as_param_specs(param_specs)
 
         self.learners = learners
@@ -51,7 +53,8 @@ def mock_rover():
     ]
 
     learners = {
-        learner_id: MockLearner(*params) for learner_id, *params in learner_parameters
+        learner_id: MockLearner(*params)
+        for learner_id, *params in learner_parameters
     }
 
     rover = MockRover(

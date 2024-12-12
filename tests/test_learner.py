@@ -24,7 +24,9 @@ def model_specs(dataset):
         model_class=model_type_dict["gaussian"],
         obs="y",
         main_param="mu",
-        param_specs={"mu": {"variables": ["intercept", "var_a", "var_b", "var_c"]}},
+        param_specs={
+            "mu": {"variables": ["intercept", "var_a", "var_b", "var_c"]}
+        },
     )
     return specs
 

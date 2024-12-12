@@ -60,7 +60,9 @@ class Rover:
     ) -> None:
         self.model_type = self._as_model_type(model_type)
         self.obs = obs
-        self.cov_fixed, self.cov_exploring = self._as_cov(cov_fixed, cov_exploring)
+        self.cov_fixed, self.cov_exploring = self._as_cov(
+            cov_fixed, cov_exploring
+        )
         self.main_param = self._as_main_param(main_param)
         self.param_specs = self._as_param_specs(param_specs)
         self.weights = weights
@@ -195,7 +197,9 @@ class Rover:
             uncertainty interval. By default, ``alpha=0.05``.
 
         """
-        return self.super_learner.predict(data, return_ui=return_ui, alpha=alpha)
+        return self.super_learner.predict(
+            data, return_ui=return_ui, alpha=alpha
+        )
 
     def plot(self, bins: Optional[int] = None) -> plt.Figure:
         """Plot the result of the exploration. Each panel of the figure
@@ -255,9 +259,9 @@ class Rover:
             coef_jitter = np.random.rand(coef.size)
             if bins is not None:
                 learner_info["bin_id"] = np.digitize(learner_info[name], bins)
-                coef_jitter = learner_info.groupby("bin_id")["score"].rank() / len(
-                    learner_info
-                )
+                coef_jitter = learner_info.groupby("bin_id")[
+                    "score"
+                ].rank() / len(learner_info)
             im = ax[i].scatter(
                 coef,
                 coef_jitter,
@@ -272,7 +276,9 @@ class Rover:
                 self.cov_exploring.index(cov),
             )
             for key, index in highlight_index.items():
-                ax[i].scatter(coef[index], coef_jitter[index], **highlight_config[key])
+                ax[i].scatter(
+                    coef[index], coef_jitter[index], **highlight_config[key]
+                )
             # indicator of 0
             ax[i].axvline(0, linewidth=1, color="gray", linestyle="--")
             # colorbar
@@ -310,7 +316,10 @@ class Rover:
                 transform=ax[i].transAxes,
                 fontsize=9,
                 bbox=dict(
-                    boxstyle="round", facecolor="none", edgecolor="grey", alpha=0.5
+                    boxstyle="round",
+                    facecolor="none",
+                    edgecolor="grey",
+                    alpha=0.5,
                 ),
             )
             # config
@@ -319,7 +328,9 @@ class Rover:
             ax[i].set_yticks([])
             if bins is not None:
                 ax[i].set_yticks([0, 1])
-        ax[0].set_title(f"models = {len(learner_info)}/{2 ** len(summary)}", loc="left")
+        ax[0].set_title(
+            f"models = {len(learner_info)}/{2 ** len(summary)}", loc="left"
+        )
 
         return fig
 
@@ -383,7 +394,9 @@ class Rover:
         )
         return param_specs
 
-    def _get_learner(self, learner_id: LearnerID, use_cache: bool = True) -> Learner:
+    def _get_learner(
+        self, learner_id: LearnerID, use_cache: bool = True
+    ) -> Learner:
         if learner_id in self.learners and use_cache:
             return self.learners[learner_id]
 
@@ -407,7 +420,8 @@ class Rover:
         """Explore the entire tree of learners"""
         strategy_options = strategy_options or {}
         strategy_options = {
-            strategy: strategy_options.get(strategy, {}) for strategy in strategies
+            strategy: strategy_options.get(strategy, {})
+            for strategy in strategies
         }
 
         for strategy in strategies:
@@ -478,7 +492,9 @@ class Rover:
             for cov, bounds in coef_bounds.items():
                 if not any(map(cov.startswith, self.params)):
                     cov = "_".join([self.main_param, cov])
-                coef_valid.append((df[cov] >= bounds[0]) & (df[cov] <= bounds[1]))
+                coef_valid.append(
+                    (df[cov] >= bounds[0]) & (df[cov] <= bounds[1])
+                )
             df["coef_valid"] = np.vstack(coef_valid).all(axis=0)
 
         df["valid"] = (df["status"] == ModelStatus.SUCCESS) & df["coef_valid"]
@@ -556,21 +572,26 @@ class Rover:
         learner_info = self.learner_info[
             self.learner_info["status"] == ModelStatus.SUCCESS
         ]
-        learner_scores = dict(zip(learner_info["learner_id"], learner_info["score"]))
+        learner_scores = dict(
+            zip(learner_info["learner_id"], learner_info["score"])
+        )
         # ensemble info
         coef_index = [
-            variables.index(f"{self.main_param}_{cov}") for cov in self.cov_exploring
+            variables.index(f"{self.main_param}_{cov}")
+            for cov in self.cov_exploring
         ]
         coef = self.super_learner.coef[coef_index]
         coef_sd = np.sqrt(np.diag(self.super_learner.vcov)[coef_index])
         # number of models the covariate is present
         pct_present = [
-            (learner_info[f"{self.main_param}_{cov}"] != 0.0).sum() / len(learner_info)
+            (learner_info[f"{self.main_param}_{cov}"] != 0.0).sum()
+            / len(learner_info)
             for cov in self.cov_exploring
         ]
         # score when only the selected covariate is present
         single_score = [
-            learner_scores.get((i,), np.nan) for i in range(len(self.cov_exploring))
+            learner_scores.get((i,), np.nan)
+            for i in range(len(self.cov_exploring))
         ]
         # average score when selected covariate is present or not
         present_score = []
@@ -599,7 +620,9 @@ class Rover:
 
         # derived quantities
         df["score_improvement"] = df["present_score"] / df["not_present_score"]
-        df["ranking"] = df["score_improvement"].rank(ascending=False).astype(int)
+        df["ranking"] = (
+            df["score_improvement"].rank(ascending=False).astype(int)
+        )
         df["coef_lwr"] = coef - 1.96 * coef_sd
         df["coef_upr"] = coef + 1.96 * coef_sd
         df["significant"] = np.sign(df["coef_lwr"] * df["coef_upr"]) > 0

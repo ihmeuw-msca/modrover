@@ -60,7 +60,9 @@ class Learner:
 
         # convert str to Variable
         for param_spec in param_specs.values():
-            param_spec["variables"] = list(map(Variable, param_spec["variables"]))
+            param_spec["variables"] = list(
+                map(Variable, param_spec["variables"])
+            )
         self.param_specs = param_specs
 
         # initialize null model
@@ -204,7 +206,9 @@ class Learner:
                 raise ValueError("`alpha` has to be between 0 and 0.5")
             vcov = model.opt_vcov[coef_index, coef_index]
             lin_param_sd = np.sqrt((mat.dot(vcov) * mat).sum(axis=1))
-            lin_param_lower = norm.ppf(0.5 * alpha, loc=lin_param, scale=lin_param_sd)
+            lin_param_lower = norm.ppf(
+                0.5 * alpha, loc=lin_param, scale=lin_param_sd
+            )
             lin_param_upper = norm.ppf(
                 1 - 0.5 * alpha, loc=lin_param, scale=lin_param_sd
             )
@@ -219,7 +223,9 @@ class Learner:
         model.data.detach_df()
         return pred
 
-    def evaluate(self, data: DataFrame, model: Optional[RegmodModel] = None) -> float:
+    def evaluate(
+        self, data: DataFrame, model: Optional[RegmodModel] = None
+    ) -> float:
         """Given a model and a test set, generate a performance score.
 
         Score is based on the provided evaluation metric, comparing the
@@ -237,7 +243,9 @@ class Learner:
         model = model or self.model
         if self.get_score is None:
             model.attach_df(data)
-            score = np.exp(-model.objective(model.opt_coefs) / model.data.weights.sum())
+            score = np.exp(
+                -model.objective(model.opt_coefs) / model.data.weights.sum()
+            )
             model = _detach_df(model)
         else:
             score = self.get_score(

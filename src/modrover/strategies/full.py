@@ -30,7 +30,9 @@ class Full(Strategy):
         second_layer = []
         for num_elements in range(1, self.num_covs + 1):
             second_layer.extend(
-                map(self._as_learner_id, combinations(all_cov_ids, num_elements))
+                map(
+                    self._as_learner_id, combinations(all_cov_ids, num_elements)
+                )
             )
         return set(second_layer)
 
