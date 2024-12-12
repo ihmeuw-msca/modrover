@@ -10,21 +10,23 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
+import datetime
+
 import tomllib
 
 with open("../pyproject.toml", "rb") as f:
-    meta = tomllib.load(f)["tool"]["sphinx"]
+    about = tomllib.load(f)["project"]
 
 
 # -- Project information -----------------------------------------------------
 
-project = meta["project"]
-author = meta["author"]
-copyright = meta["copyright"]
+project = about["name"]
+author = ", ".join([info["name"] for info in about["authors"]])
+copyright = f"2019-{datetime.datetime.today().year}, {author}"
 
 
 # The full version, including alpha/beta/rc tags
-version = meta["version"]
+version = about["version"]
 
 
 # -- General configuration ---------------------------------------------------
