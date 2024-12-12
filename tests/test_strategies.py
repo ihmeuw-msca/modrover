@@ -63,7 +63,11 @@ def test_parent_ratio():
     lid_2 = (0, 2)
 
     # Mock up some scores
-    learners = {(0, 1, 2): DummyModel(7), lid_1: DummyModel(5), lid_2: DummyModel(10)}
+    learners = {
+        (0, 1, 2): DummyModel(7),
+        lid_1: DummyModel(5),
+        lid_2: DummyModel(10),
+    }
 
     upstreams = strategy._get_upstream_learner_ids(lid_1, learners).union(
         strategy._get_upstream_learner_ids(lid_2, learners)
@@ -75,7 +79,10 @@ def test_parent_ratio():
     # LID 2 has better score than all parents, so we should be exploring further
 
     new_lids = strategy._filter_curr_layer(
-        curr_layer={lid_1, lid_2}, learners=learners, max_len=3, min_improvement=1
+        curr_layer={lid_1, lid_2},
+        learners=learners,
+        max_len=3,
+        min_improvement=1,
     )
     assert new_lids == {lid_2}
 
@@ -133,7 +140,9 @@ def test_generate_backward_layer():
 def test_full_explore():
     full_strategy = Full(3)
 
-    second_layer = full_strategy.get_next_layer(full_strategy.first_layer, dict())
+    second_layer = full_strategy.get_next_layer(
+        full_strategy.first_layer, dict()
+    )
     expected_combos = {
         (0,),
         (1,),

@@ -1,4 +1,4 @@
-from modrover.learner import Learner, LearnerID
+from modrover.learner import Learner
 from modrover.rover import Rover
 
 
@@ -16,7 +16,12 @@ def test_get_learner():
     assert len(learner.param_specs["mu"]["variables"]) == 4
     # Check that the order is preserved
     variables = learner.param_specs["mu"]["variables"]
-    assert [var.name for var in variables] == ["intercept", "cov1", "cov2", "cov3"]
+    assert [var.name for var in variables] == [
+        "intercept",
+        "cov1",
+        "cov2",
+        "cov3",
+    ]
 
 
 def test_empty_learner_id():
@@ -28,7 +33,9 @@ def test_empty_learner_id():
         cov_exploring=["cov1", "cov2", "cov3"],
     )
 
-    assert rover._get_param_specs(tuple()) == {"mu": {"variables": ["intercept"]}}
+    assert rover._get_param_specs(tuple()) == {
+        "mu": {"variables": ["intercept"]}
+    }
 
     learner = rover._get_learner(tuple())
     variables = learner.param_specs["mu"]["variables"]

@@ -51,7 +51,9 @@ def test_two_parameter_get_coef_index(mock_rover):
     mock_rover.param = "mu"
     mock_rover.cov_fixed = [0, 3]
     mock_rover.cov_exploring = [1, 2]
-    mock_rover.param_specs = mock_rover._as_param_specs({"sigma": {"variables": [4]}})
+    mock_rover.param_specs = mock_rover._as_param_specs(
+        {"sigma": {"variables": [4]}}
+    )
 
     # Expected ordering out of a particular model:
     # Say learner_id = (0,) - represents both parameters

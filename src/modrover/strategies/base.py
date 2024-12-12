@@ -81,7 +81,8 @@ class Strategy(ABC):
         all_covs_ids = set(range(self.num_covs))
         remaining_cov_ids = all_covs_ids - set(learner_id)
         children = {
-            self._as_learner_id((*learner_id, cov_id)) for cov_id in remaining_cov_ids
+            self._as_learner_id((*learner_id, cov_id))
+            for cov_id in remaining_cov_ids
         }
         return children
 
@@ -108,7 +109,8 @@ class Strategy(ABC):
         Return the remainder
         """
         curr_layer = filter(
-            lambda learner_id: learners[learner_id].status == ModelStatus.SUCCESS,
+            lambda learner_id: learners[learner_id].status
+            == ModelStatus.SUCCESS,
             curr_layer,
         )
         sorted_learner_ids = sorted(

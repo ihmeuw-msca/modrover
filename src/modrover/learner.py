@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from enum import Enum
-from typing import Callable, Optional
+from typing import Callable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -50,7 +50,7 @@ class Learner:
         main_param: str,
         param_specs: dict[str, dict],
         weights: str = "weights",
-        get_score: Optional[Callable] = None,
+        get_score: Callable | None = None,
     ) -> None:
         self.model_class = model_class
         self.obs = obs
@@ -60,7 +60,9 @@ class Learner:
 
         # convert str to Variable
         for param_spec in param_specs.values():
-            param_spec["variables"] = list(map(Variable, param_spec["variables"]))
+            param_spec["variables"] = list(
+                map(Variable, param_spec["variables"])
+            )
         self.param_specs = param_specs
 
         # initialize null model
@@ -74,7 +76,7 @@ class Learner:
         self._cv_status = defaultdict(lambda: ModelStatus.NOT_FITTED)
 
     @property
-    def coef(self) -> Optional[NDArray]:
+    def coef(self) -> NDArray | None:
         """Coefficients in the regmod model."""
         return self.model.opt_coefs
 
@@ -85,7 +87,7 @@ class Learner:
         self.model.opt_coefs = coef
 
     @property
-    def vcov(self) -> Optional[NDArray]:
+    def vcov(self) -> NDArray | None:
         """Variance-covarianace matrix for the coefficients in the regmod model."""
         return self.model.opt_vcov
 
@@ -98,7 +100,7 @@ class Learner:
     def fit(
         self,
         data: DataFrame,
-        holdouts: Optional[list[str]] = None,
+        holdouts: list[str] | None = None,
         **optimizer_options,
     ) -> None:
         """
@@ -160,7 +162,7 @@ class Learner:
     def predict(
         self,
         data: DataFrame,
-        model: Optional[RegmodModel] = None,
+        model: RegmodModel | None = None,
         return_ui: bool = False,
         alpha: float = 0.05,
     ) -> NDArray:
@@ -204,7 +206,9 @@ class Learner:
                 raise ValueError("`alpha` has to be between 0 and 0.5")
             vcov = model.opt_vcov[coef_index, coef_index]
             lin_param_sd = np.sqrt((mat.dot(vcov) * mat).sum(axis=1))
-            lin_param_lower = norm.ppf(0.5 * alpha, loc=lin_param, scale=lin_param_sd)
+            lin_param_lower = norm.ppf(
+                0.5 * alpha, loc=lin_param, scale=lin_param_sd
+            )
             lin_param_upper = norm.ppf(
                 1 - 0.5 * alpha, loc=lin_param, scale=lin_param_sd
             )
@@ -219,7 +223,9 @@ class Learner:
         model.data.detach_df()
         return pred
 
-    def evaluate(self, data: DataFrame, model: Optional[RegmodModel] = None) -> float:
+    def evaluate(
+        self, data: DataFrame, model: RegmodModel | None = None
+    ) -> float:
         """Given a model and a test set, generate a performance score.
 
         Score is based on the provided evaluation metric, comparing the
@@ -237,7 +243,9 @@ class Learner:
         model = model or self.model
         if self.get_score is None:
             model.attach_df(data)
-            score = np.exp(-model.objective(model.opt_coefs) / model.data.weights.sum())
+            score = np.exp(
+                -model.objective(model.opt_coefs) / model.data.weights.sum()
+            )
             model = _detach_df(model)
         else:
             score = self.get_score(
@@ -265,7 +273,7 @@ class Learner:
     def _fit(
         self,
         data: DataFrame,
-        model: Optional[RegmodModel] = None,
+        model: RegmodModel | None = None,
         **optimizer_options,
     ) -> ModelStatus:
         model = model or self.model
@@ -277,7 +285,7 @@ class Learner:
             try:
                 model.fit(**optimizer_options)
                 status = ModelStatus.SUCCESS
-            except:
+            except Exception:
                 status = ModelStatus.SOLVER_FAILED
         model = _detach_df(model)
         return status
