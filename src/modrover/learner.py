@@ -285,7 +285,7 @@ class Learner:
             try:
                 model.fit(**optimizer_options)
                 status = ModelStatus.SUCCESS
-            except:
+            except Exception:
                 status = ModelStatus.SOLVER_FAILED
         model = _detach_df(model)
         return status
