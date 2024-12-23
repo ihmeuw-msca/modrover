@@ -252,9 +252,8 @@ class Learner:
         model = model or self.model
         if self.get_score is None:
             model.attach_df(data)
-            score = np.exp(
-                -model.objective(model.opt_coefs) / model.data.weights.sum()
-            )
+            pearson_r2 = model.get_pearson_residuals(model.opt_coefs) ** 2
+            score = np.exp(-np.sqrt(np.mean(pearson_r2)))
             model = _detach_df(model)
         else:
             score = self.get_score(

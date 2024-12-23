@@ -56,7 +56,7 @@ class Rover:
         param_specs: dict[str, dict] | None = None,
         weights: str = "weights",
         holdouts: list[str] | None = None,
-        get_score: Callable = get_rmse,
+        get_score: Callable | None = get_rmse,
         lam_ridge: float = 0.0,
     ) -> None:
         self.model_type = self._as_model_type(model_type)
