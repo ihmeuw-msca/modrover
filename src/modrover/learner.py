@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from enum import Enum
-from typing import Callable
+from typing import Callable, Mapping
 
 import numpy as np
 from numpy.typing import NDArray
@@ -64,6 +64,10 @@ class Learner:
                 map(Variable, param_spec["variables"])
             )
         self.param_specs = param_specs
+        self._main_cov_names = [
+            var.name for var in self.param_specs[self.main_param]["variables"]
+        ]
+        self._use_fast_linear = self._can_use_fast_linear()
 
         # initialize null model
         self.model = self._get_model()
@@ -101,6 +105,7 @@ class Learner:
         self,
         data: DataFrame,
         holdouts: list[str] | None = None,
+        holdout_data: Mapping[str, tuple[DataFrame, DataFrame, NDArray]] | None = None,
         **optimizer_options,
     ) -> None:
         """
@@ -125,6 +130,11 @@ class Learner:
             Which column names to iterate over for cross validation. If it is
             `None`, insample performance score will be used to evaluate the
             model.
+        holdout_data
+            Optional precomputed mapping from holdout name to a tuple of
+            (train_df, validation_df, validation_obs). This avoids recomputing
+            split/groupby work and repeated observation extraction for every
+            learner while preserving the same folds.
         **optimizer_options
             Extra options for the optimizer.
 
@@ -134,16 +144,28 @@ class Learner:
         if holdouts:
             # If holdout cols are provided, loop through to calculate OOS score
             for holdout in holdouts:
-                data_group = data.groupby(holdout)
+                if holdout_data is not None and holdout in holdout_data:
+                    train_data, val_data, val_obs = holdout_data[holdout]
+                else:
+                    data_group = data.groupby(holdout)
+                    train_data = data_group.get_group(0)
+                    val_data = data_group.get_group(1)
+                    val_obs = val_data[self.obs].to_numpy()
                 self._cv_status[holdout] = self._fit(
-                    data_group.get_group(0),
+                    train_data,
                     self._cv_models[holdout],
                     **optimizer_options,
                 )
                 if self._cv_status[holdout] == ModelStatus.SUCCESS:
-                    self._cv_scores[holdout] = self.evaluate(
-                        data_group.get_group(1), self._cv_models[holdout]
-                    )
+                    if self.get_score is None:
+                        self._cv_scores[holdout] = self.evaluate(
+                            val_data, self._cv_models[holdout]
+                        )
+                    else:
+                        pred = self.predict(val_data, model=self._cv_models[holdout])
+                        self._cv_scores[holdout] = self.get_score(
+                            obs=val_obs, pred=pred
+                        )
                 else:
                     self.status = ModelStatus.CV_FAILED
                     break
@@ -186,6 +208,26 @@ class Learner:
 
         """
         model = model or self.model
+        if self._use_fast_linear and model.opt_coefs is not None:
+            mat = data[self._main_cov_names].to_numpy(dtype=float)
+            coef = model.opt_coefs
+            pred = mat.dot(coef)
+            if return_ui:
+                if alpha < 0 or alpha > 0.5:
+                    raise ValueError("`alpha` has to be between 0 and 0.5")
+                vcov = model.opt_vcov
+                if vcov is None:
+                    raise ValueError("vcov is not available for uncertainty interval")
+                lin_param_sd = np.sqrt((mat.dot(vcov) * mat).sum(axis=1))
+                lin_param_lower = norm.ppf(
+                    0.5 * alpha, loc=pred, scale=lin_param_sd
+                )
+                lin_param_upper = norm.ppf(
+                    1 - 0.5 * alpha, loc=pred, scale=lin_param_sd
+                )
+                pred = np.vstack([pred, lin_param_lower, lin_param_upper])
+            return pred
+
         model.data.attach_df(data)
         index = model.param_names.index(self.main_param)
         param = model.params[index]
@@ -255,11 +297,17 @@ class Learner:
         return score
 
     def _get_model(self) -> RegmodModel:
+        col_covs = []
+        for param_spec in self.param_specs.values():
+            col_covs.extend([var.name for var in param_spec["variables"]])
+        col_covs = sorted(set(col_covs))
+
         # TODO: this shouldn't be necessary in regmod v1.0.0
         data = Data(
             col_obs=self.obs,
+            col_covs=col_covs,
             col_weights=self.weights,
-            subset_cols=False,
+            subset_cols=True,
         )
 
         # Create regmod variables separately, by parameter
@@ -268,6 +316,7 @@ class Learner:
             data=data,
             param_specs=self.param_specs,
         )
+        _enable_data_cache(model.data)
         return model
 
     def _fit(
@@ -277,18 +326,131 @@ class Learner:
         **optimizer_options,
     ) -> ModelStatus:
         model = model or self.model
+        if self._use_fast_linear:
+            return self._fit_fast_linear(data, model)
+        if "trim_weights" in data.columns:
+            data["trim_weights"] = 1.0
         model.attach_df(data)
-        mat = model.mat[0]
-        if np.linalg.matrix_rank(mat) < mat.shape[1]:
-            status = ModelStatus.SINGULAR
-        else:
-            try:
-                model.fit(**optimizer_options)
-                status = ModelStatus.SUCCESS
-            except Exception:
+        try:
+            model.fit(**optimizer_options)
+            status = ModelStatus.SUCCESS
+        except Exception as exc:
+            msg = str(exc).lower()
+            if isinstance(exc, np.linalg.LinAlgError) or "singular" in msg:
+                status = ModelStatus.SINGULAR
+            else:
                 status = ModelStatus.SOLVER_FAILED
         model = _detach_df(model)
         return status
+
+    def _fit_fast_linear(
+        self,
+        data: DataFrame,
+        model: RegmodModel,
+    ) -> ModelStatus:
+        try:
+            x = data[self._main_cov_names].to_numpy(dtype=float)
+            y = data[self.obs].to_numpy(dtype=float).reshape(-1)
+            w = data[self.weights].to_numpy(dtype=float).reshape(-1)
+            if "trim_weights" in data.columns:
+                w = w * data["trim_weights"].to_numpy(dtype=float).reshape(-1)
+
+            sqrt_w = np.sqrt(w)
+            xw = x * sqrt_w[:, None]
+            yw = y * sqrt_w
+
+            coef, _, rank, _ = np.linalg.lstsq(xw, yw, rcond=None)
+            if rank < xw.shape[1]:
+                return ModelStatus.SINGULAR
+
+            model.opt_coefs = coef
+            # CV learners only need coefficients for scoring. We keep full vcov
+            # computation for the final learner used in summary/inference.
+            if model is self.model:
+                resid = y - x.dot(coef)
+                wsse = float(np.sum(w * resid**2))
+                dof = max(len(y) - x.shape[1], 1)
+                sigma2 = wsse / dof
+
+                xtwx = xw.T.dot(xw)
+                xtwx_inv = np.linalg.inv(xtwx)
+                vcov = sigma2 * xtwx_inv
+                model.opt_vcov = vcov
+            return ModelStatus.SUCCESS
+        except Exception as exc:
+            msg = str(exc).lower()
+            if isinstance(exc, np.linalg.LinAlgError) or "singular" in msg:
+                return ModelStatus.SINGULAR
+            return ModelStatus.SOLVER_FAILED
+
+    def _can_use_fast_linear(self) -> bool:
+        # Exact for gaussian identity-link models with main parameter "mu".
+        if self.main_param != "mu":
+            return False
+        if tuple(self.model_class.param_names) != ("mu",):
+            return False
+        main_spec = self.param_specs.get(self.main_param, {})
+        inv_link = main_spec.get("inv_link")
+        if inv_link is not None and inv_link != "identity":
+            return False
+        return True
+
+
+def _enable_data_cache(data: Data) -> None:
+    """Cache repeated Data.get_cols lookups for a single attached dataframe."""
+    if getattr(data, "_modrover_cache_enabled", False):
+        return
+
+    col_cache: dict[tuple[str, tuple[str, ...] | str], NDArray] = {}
+    orig_detach = data.detach_df
+    orig_get_cols = data.get_cols
+
+    def _cache_key(cols: str | list[str]) -> tuple[str, tuple[str, ...] | str] | None:
+        if isinstance(cols, str):
+            if cols == "trim_weights":
+                return None
+            return ("str", cols)
+        cols_tuple = tuple(cols)
+        if "trim_weights" in cols_tuple:
+            return None
+        return ("list", cols_tuple)
+
+    def attach_df_cached(df: DataFrame):
+        col_cache.clear()
+        data.df = df
+        if "intercept" not in data.df.columns:
+            data.df["intercept"] = 1.0
+        if data.col_weights not in data.df.columns:
+            data.df[data.col_weights] = 1.0
+        if data.col_offset not in data.df.columns:
+            data.df[data.col_offset] = 0.0
+        if data.col_obs is not None:
+            cols = data.col_obs if isinstance(data.col_obs, list) else [data.col_obs]
+            for col in cols:
+                if col not in data.df.columns:
+                    data.df[col] = np.nan
+        if "trim_weights" not in data.df.columns:
+            data.df["trim_weights"] = 1.0
+        data.check_cols()
+
+    def detach_df_cached():
+        col_cache.clear()
+        return orig_detach()
+
+    def get_cols_cached(cols: str | list[str]) -> NDArray:
+        key = _cache_key(cols)
+        if key is None:
+            return orig_get_cols(cols)
+        cached = col_cache.get(key)
+        if cached is None:
+            cached = orig_get_cols(cols)
+            col_cache[key] = cached
+        return cached
+
+    data.attach_df = attach_df_cached  # type: ignore[method-assign]
+    data.detach_df = detach_df_cached  # type: ignore[method-assign]
+    data.get_cols = get_cols_cached  # type: ignore[method-assign]
+    data._modrover_cache_enabled = True  # type: ignore[attr-defined]
 
 
 def _detach_df(model: RegmodModel) -> RegmodModel:

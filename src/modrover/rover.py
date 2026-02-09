@@ -423,6 +423,9 @@ class Rover:
             strategy: strategy_options.get(strategy, {})
             for strategy in strategies
         }
+        holdout_data = None
+        if self.holdouts:
+            holdout_data = self._prepare_holdout_data(data, self.holdouts)
 
         for strategy in strategies:
             options = strategy_options[strategy]
@@ -432,7 +435,11 @@ class Rover:
                 for learner_id in curr_ids:
                     learner = self._get_learner(learner_id)
                     if learner.status == ModelStatus.NOT_FITTED:
-                        learner.fit(data, self.holdouts)
+                        learner.fit(
+                            data,
+                            self.holdouts,
+                            holdout_data=holdout_data,
+                        )
                         self.learners[learner_id] = learner
 
                 next_ids = strategy.get_next_layer(
@@ -441,6 +448,29 @@ class Rover:
                     **options,
                 )
                 curr_ids = next_ids
+
+    def _prepare_holdout_data(
+        self, data: DataFrame, holdouts: list[str]
+    ) -> dict[str, tuple[DataFrame, DataFrame, NDArray]]:
+        """Precompute train/validation splits for all holdouts once."""
+        if "offset" not in data.columns or "trim_weights" not in data.columns:
+            data = data.copy()
+            if "offset" not in data.columns:
+                data["offset"] = 0.0
+            if "trim_weights" not in data.columns:
+                data["trim_weights"] = 1.0
+
+        split_data = {}
+        for holdout in holdouts:
+            train_data = data[data[holdout] == 0]
+            val_data = data[data[holdout] == 1]
+            if len(train_data) == 0 or len(val_data) == 0:
+                raise InvalidConfigurationError(
+                    f"Holdout {holdout} must include both 0 and 1 rows."
+                )
+            val_obs = val_data[self.obs].to_numpy()
+            split_data[holdout] = (train_data, val_data, val_obs)
+        return split_data
 
     # construct super learner ==================================================
     def _get_super_learner(
