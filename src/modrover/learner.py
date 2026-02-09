@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from enum import Enum
-from typing import Callable, Mapping
+from typing import Any, Callable, Mapping
 
 import numpy as np
 from numpy.typing import NDArray
@@ -105,7 +105,11 @@ class Learner:
         self,
         data: DataFrame,
         holdouts: list[str] | None = None,
-        holdout_data: Mapping[str, tuple[DataFrame, DataFrame, NDArray]] | None = None,
+        holdout_data: Mapping[
+            str, tuple[DataFrame, DataFrame, NDArray, dict[str, Any] | None]
+        ]
+        | None = None,
+        full_linear_cache: dict[str, Any] | None = None,
         **optimizer_options,
     ) -> None:
         """
@@ -132,28 +136,57 @@ class Learner:
             model.
         holdout_data
             Optional precomputed mapping from holdout name to a tuple of
-            (train_df, validation_df, validation_obs). This avoids recomputing
-            split/groupby work and repeated observation extraction for every
-            learner while preserving the same folds.
+            (train_df, validation_df, validation_obs, linear_cache). This avoids
+            recomputing split/groupby work and repeated observation extraction
+            for every learner while preserving the same folds.
+        full_linear_cache
+            Optional precomputed linear algebra cache on the full dataset.
         **optimizer_options
             Extra options for the optimizer.
 
         """
         if self.status != ModelStatus.NOT_FITTED:
             return
+
+        linear_idx = None
+        if self._use_fast_linear and full_linear_cache is not None:
+            col_index = full_linear_cache.get("col_index")
+            if col_index is not None:
+                linear_idx = np.array(
+                    [col_index[name] for name in self._main_cov_names],
+                    dtype=int,
+                )
+
         if holdouts:
             # If holdout cols are provided, loop through to calculate OOS score
             for holdout in holdouts:
+                linear_cache = None
                 if holdout_data is not None and holdout in holdout_data:
-                    train_data, val_data, val_obs = holdout_data[holdout]
+                    train_data, val_data, val_obs, linear_cache = holdout_data[holdout]
                 else:
                     data_group = data.groupby(holdout)
                     train_data = data_group.get_group(0)
                     val_data = data_group.get_group(1)
                     val_obs = val_data[self.obs].to_numpy()
+
+                holdout_linear_idx = linear_idx
+                if (
+                    self._use_fast_linear
+                    and holdout_linear_idx is None
+                    and linear_cache is not None
+                ):
+                    col_index = linear_cache.get("col_index")
+                    if col_index is not None:
+                        holdout_linear_idx = np.array(
+                            [col_index[name] for name in self._main_cov_names],
+                            dtype=int,
+                        )
+
                 self._cv_status[holdout] = self._fit(
                     train_data,
                     self._cv_models[holdout],
+                    linear_cache=linear_cache,
+                    linear_idx=holdout_linear_idx,
                     **optimizer_options,
                 )
                 if self._cv_status[holdout] == ModelStatus.SUCCESS:
@@ -162,7 +195,19 @@ class Learner:
                             val_data, self._cv_models[holdout]
                         )
                     else:
-                        pred = self.predict(val_data, model=self._cv_models[holdout])
+                        if (
+                            self._use_fast_linear
+                            and linear_cache is not None
+                            and holdout_linear_idx is not None
+                            and "x_val" in linear_cache
+                        ):
+                            x_val = linear_cache["x_val"][:, holdout_linear_idx]
+                            coef = self._cv_models[holdout].opt_coefs
+                            pred = x_val.dot(coef)
+                        else:
+                            pred = self.predict(
+                                val_data, model=self._cv_models[holdout]
+                            )
                         self._cv_scores[holdout] = self.get_score(
                             obs=val_obs, pred=pred
                         )
@@ -176,7 +221,12 @@ class Learner:
 
         # Fit final model with all data included
         if self.status != ModelStatus.CV_FAILED:
-            self.status = self._fit(data, **optimizer_options)
+            self.status = self._fit(
+                data,
+                linear_cache=full_linear_cache,
+                linear_idx=linear_idx,
+                **optimizer_options,
+            )
             # If holdout cols not provided, use in-sample evaluate for the full data model
             if self.status == ModelStatus.SUCCESS and (not holdouts):
                 self.score = self.evaluate(data)
@@ -323,11 +373,13 @@ class Learner:
         self,
         data: DataFrame,
         model: RegmodModel | None = None,
+        linear_cache: dict[str, Any] | None = None,
+        linear_idx: NDArray | None = None,
         **optimizer_options,
     ) -> ModelStatus:
         model = model or self.model
         if self._use_fast_linear:
-            return self._fit_fast_linear(data, model)
+            return self._fit_fast_linear(data, model, linear_cache, linear_idx)
         if "trim_weights" in data.columns:
             data["trim_weights"] = 1.0
         model.attach_df(data)
@@ -347,32 +399,54 @@ class Learner:
         self,
         data: DataFrame,
         model: RegmodModel,
+        linear_cache: dict[str, Any] | None = None,
+        linear_idx: NDArray | None = None,
     ) -> ModelStatus:
         try:
-            x = data[self._main_cov_names].to_numpy(dtype=float)
-            y = data[self.obs].to_numpy(dtype=float).reshape(-1)
-            w = data[self.weights].to_numpy(dtype=float).reshape(-1)
-            if "trim_weights" in data.columns:
-                w = w * data["trim_weights"].to_numpy(dtype=float).reshape(-1)
+            if linear_cache is not None and linear_idx is not None:
+                idx = np.asarray(linear_idx, dtype=int)
+                xtwx_all = linear_cache["xtwx"]
+                xtwy_all = linear_cache["xtwy"]
+                xtwx = xtwx_all[np.ix_(idx, idx)]
+                xtwy = xtwy_all[idx]
+                try:
+                    coef = np.linalg.solve(xtwx, xtwy)
+                except np.linalg.LinAlgError:
+                    coef, _, rank, _ = np.linalg.lstsq(xtwx, xtwy, rcond=None)
+                    if rank < xtwx.shape[1]:
+                        return ModelStatus.SINGULAR
+                n_obs = int(linear_cache["n_obs"])
+                ywy = float(linear_cache["ywy"])
+            else:
+                x = data[self._main_cov_names].to_numpy(dtype=float)
+                y = data[self.obs].to_numpy(dtype=float).reshape(-1)
+                w = data[self.weights].to_numpy(dtype=float).reshape(-1)
+                if "trim_weights" in data.columns:
+                    w = w * data["trim_weights"].to_numpy(dtype=float).reshape(-1)
 
-            sqrt_w = np.sqrt(w)
-            xw = x * sqrt_w[:, None]
-            yw = y * sqrt_w
+                sqrt_w = np.sqrt(w)
+                xw = x * sqrt_w[:, None]
+                yw = y * sqrt_w
 
-            coef, _, rank, _ = np.linalg.lstsq(xw, yw, rcond=None)
-            if rank < xw.shape[1]:
-                return ModelStatus.SINGULAR
+                coef, _, rank, _ = np.linalg.lstsq(xw, yw, rcond=None)
+                if rank < xw.shape[1]:
+                    return ModelStatus.SINGULAR
+                xtwx = xw.T.dot(xw)
+                xtwy = xw.T.dot(yw)
+                ywy = float(yw.dot(yw))
+                n_obs = len(y)
 
             model.opt_coefs = coef
             # CV learners only need coefficients for scoring. We keep full vcov
             # computation for the final learner used in summary/inference.
             if model is self.model:
-                resid = y - x.dot(coef)
-                wsse = float(np.sum(w * resid**2))
-                dof = max(len(y) - x.shape[1], 1)
+                wsse = max(
+                    ywy - 2.0 * float(coef.dot(xtwy)) + float(coef.dot(xtwx.dot(coef))),
+                    0.0,
+                )
+                dof = max(n_obs - len(coef), 1)
                 sigma2 = wsse / dof
 
-                xtwx = xw.T.dot(xw)
                 xtwx_inv = np.linalg.inv(xtwx)
                 vcov = sigma2 * xtwx_inv
                 model.opt_vcov = vcov

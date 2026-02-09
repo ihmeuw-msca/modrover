@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Callable
+from typing import Any, Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -424,8 +424,11 @@ class Rover:
             for strategy in strategies
         }
         holdout_data = None
+        full_linear_cache = None
         if self.holdouts:
-            holdout_data = self._prepare_holdout_data(data, self.holdouts)
+            holdout_data, full_linear_cache = self._prepare_holdout_data(
+                data, self.holdouts
+            )
 
         for strategy in strategies:
             options = strategy_options[strategy]
@@ -439,6 +442,7 @@ class Rover:
                             data,
                             self.holdouts,
                             holdout_data=holdout_data,
+                            full_linear_cache=full_linear_cache,
                         )
                         self.learners[learner_id] = learner
 
@@ -451,7 +455,10 @@ class Rover:
 
     def _prepare_holdout_data(
         self, data: DataFrame, holdouts: list[str]
-    ) -> dict[str, tuple[DataFrame, DataFrame, NDArray]]:
+    ) -> tuple[
+        dict[str, tuple[DataFrame, DataFrame, NDArray, dict[str, Any] | None]],
+        dict[str, Any] | None,
+    ]:
         """Precompute train/validation splits for all holdouts once."""
         if "offset" not in data.columns or "trim_weights" not in data.columns:
             data = data.copy()
@@ -459,6 +466,14 @@ class Rover:
                 data["offset"] = 0.0
             if "trim_weights" not in data.columns:
                 data["trim_weights"] = 1.0
+
+        cov_names = list(dict.fromkeys([*self.cov_fixed, *self.cov_exploring]))
+        col_index = {name: i for i, name in enumerate(cov_names)}
+        full_linear_cache = (
+            self._build_linear_cache(data, cov_names, col_index)
+            if cov_names
+            else None
+        )
 
         split_data = {}
         for holdout in holdouts:
@@ -468,9 +483,42 @@ class Rover:
                 raise InvalidConfigurationError(
                     f"Holdout {holdout} must include both 0 and 1 rows."
                 )
-            val_obs = val_data[self.obs].to_numpy()
-            split_data[holdout] = (train_data, val_data, val_obs)
-        return split_data
+            val_obs = val_data[self.obs].to_numpy(dtype=float, copy=False)
+            linear_cache = None
+            if cov_names:
+                linear_cache = self._build_linear_cache(
+                    train_data, cov_names, col_index
+                )
+                linear_cache["x_val"] = val_data[cov_names].to_numpy(
+                    dtype=float, copy=False
+                )
+            split_data[holdout] = (train_data, val_data, val_obs, linear_cache)
+        return split_data, full_linear_cache
+
+    def _build_linear_cache(
+        self,
+        data: DataFrame,
+        cov_names: list[str],
+        col_index: dict[str, int],
+    ) -> dict[str, Any]:
+        x = data[cov_names].to_numpy(dtype=float, copy=False)
+        y = data[self.obs].to_numpy(dtype=float, copy=False).reshape(-1)
+        w = data[self.weights].to_numpy(dtype=float, copy=False).reshape(-1)
+        if "trim_weights" in data.columns:
+            w = w * data["trim_weights"].to_numpy(dtype=float, copy=False).reshape(
+                -1
+            )
+        sqrt_w = np.sqrt(w)
+        xw = x * sqrt_w[:, None]
+        yw = y * sqrt_w
+
+        return {
+            "col_index": col_index,
+            "xtwx": xw.T.dot(xw),
+            "xtwy": xw.T.dot(yw),
+            "ywy": float(yw.dot(yw)),
+            "n_obs": int(len(y)),
+        }
 
     # construct super learner ==================================================
     def _get_super_learner(
