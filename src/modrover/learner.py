@@ -22,6 +22,15 @@ class ModelStatus(Enum):
     NOT_FITTED = -1
 
 
+class _FastLinearModel:
+    """Lightweight model holder for fast gaussian path."""
+
+    def __init__(self, size: int) -> None:
+        self.size = size
+        self.opt_coefs: NDArray | None = None
+        self.opt_vcov: NDArray | None = None
+
+
 class Learner:
     """Individual learner class for one specific covariate configuration.
 
@@ -67,6 +76,10 @@ class Learner:
             var.name for var in self.param_specs[self.main_param]["variables"]
         ]
         self._use_fast_linear = self._can_use_fast_linear()
+        # Fast gaussian + custom scorer path never needs full regmod objects.
+        self._use_lightweight_model = self._use_fast_linear and (
+            self.get_score is not None
+        )
 
         # initialize null model
         self.model = self._get_model()
@@ -74,7 +87,7 @@ class Learner:
         self.status = ModelStatus.NOT_FITTED
 
         # initialize cross validation state
-        self._cv_models: dict[str, RegmodModel] = {}
+        self._cv_models: dict[str, Any] = {}
         self._cv_scores: dict[str, float | None] = {}
         self._cv_status: dict[str, ModelStatus] = {}
 
@@ -251,7 +264,7 @@ class Learner:
     def predict(
         self,
         data: DataFrame,
-        model: RegmodModel | None = None,
+        model: Any | None = None,
         return_ui: bool = False,
         alpha: float = 0.05,
     ) -> NDArray:
@@ -332,9 +345,7 @@ class Learner:
         model.data.detach_df()
         return pred
 
-    def evaluate(
-        self, data: DataFrame, model: RegmodModel | None = None
-    ) -> float:
+    def evaluate(self, data: DataFrame, model: Any | None = None) -> float:
         """Given a model and a test set, generate a performance score.
 
         Score is based on the provided evaluation metric, comparing the
@@ -363,7 +374,10 @@ class Learner:
             )
         return score
 
-    def _get_model(self) -> RegmodModel:
+    def _get_model(self) -> Any:
+        if self._use_lightweight_model:
+            return _FastLinearModel(size=len(self._main_cov_names))
+
         col_covs = []
         for param_spec in self.param_specs.values():
             col_covs.extend([var.name for var in param_spec["variables"]])
