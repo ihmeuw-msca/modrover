@@ -70,6 +70,7 @@ class Rover:
         self.get_score = get_score
 
         self.learners: dict[LearnerID, Learner] = {}
+        self._coef_index_cache: dict[LearnerID, list[int]] = {}
 
     @property
     def model_class(self) -> type:
@@ -550,19 +551,27 @@ class Rover:
         top_pct_learner: float = 1.0,
         coef_bounds: dict[str, tuple[float, float]] | None = None,
     ) -> DataFrame:
-        df = DataFrame(
-            columns=["learner_id", "status"] + list(self.variables) + ["score"]
-        )
-        for learner_id, learner in self.learners.items():
-            row = [learner_id, learner.status]
-            coef, score = np.repeat(np.nan, self.num_vars), np.nan
+        learner_ids = list(self.learners.keys())
+        n_learners = len(learner_ids)
+
+        coef = np.full((n_learners, self.num_vars), np.nan, dtype=float)
+        score = np.full(n_learners, np.nan, dtype=float)
+        status = np.empty(n_learners, dtype=object)
+
+        for i, learner_id in enumerate(learner_ids):
+            learner = self.learners[learner_id]
+            status[i] = learner.status
             if learner.status == ModelStatus.SUCCESS:
-                coef = np.zeros(self.num_vars)
-                coef_index = self._get_coef_index(learner_id)
-                coef[coef_index] = learner.coef
-                score = learner.score
-            row.extend(list(coef) + [score])
-            df.loc[len(df)] = row
+                coef_idx = self._get_coef_index(learner_id)
+                coef_row = np.zeros(self.num_vars, dtype=float)
+                coef_row[coef_idx] = learner.coef
+                coef[i] = coef_row
+                score[i] = learner.score
+
+        df = DataFrame(coef, columns=list(self.variables))
+        df.insert(0, "status", status)
+        df.insert(0, "learner_id", learner_ids)
+        df["score"] = score
 
         df["coef_valid"] = True
         if coef_bounds:
@@ -577,11 +586,17 @@ class Rover:
 
         df["valid"] = (df["status"] == ModelStatus.SUCCESS) & df["coef_valid"]
         df["weight"] = 0.0
-        df.loc[df["valid"], "weight"] = self._get_super_weights(
-            df.loc[df["valid"], "learner_id"], top_pct_score, top_pct_learner
-        )
+        valid_ids = df.loc[df["valid"], "learner_id"]
+        if len(valid_ids) > 0:
+            df.loc[df["valid"], "weight"] = self._get_super_weights(
+                valid_ids, top_pct_score, top_pct_learner
+            )
 
-        df["score_scaled"] = df["score"] / df["score"].dropna().max()
+        score_max = df["score"].dropna().max()
+        if np.isfinite(score_max) and score_max != 0.0:
+            df["score_scaled"] = df["score"] / score_max
+        else:
+            df["score_scaled"] = np.nan
         self._learner_info = df
         return df
 
@@ -615,6 +630,10 @@ class Rover:
         return super_vcov
 
     def _get_coef_index(self, learner_id: LearnerID) -> list[int]:
+        cached = self._coef_index_cache.get(learner_id)
+        if cached is not None:
+            return cached
+
         coef_index, pointer = [], 0
         for param in self.params:
             num_covs = len(self.param_specs[param]["variables"])
@@ -623,6 +642,8 @@ class Rover:
             if param == self.main_param:
                 coef_index.extend([i + pointer for i in learner_id])
                 pointer += len(self.cov_exploring)
+
+        self._coef_index_cache[learner_id] = coef_index
         return coef_index
 
     def _get_super_weights(

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from enum import Enum
 from typing import Any, Callable, Mapping
 
@@ -74,10 +73,10 @@ class Learner:
         self.score = np.nan
         self.status = ModelStatus.NOT_FITTED
 
-        # initialize cross validation model
-        self._cv_models = defaultdict(self._get_model)
-        self._cv_scores = defaultdict(lambda: None)
-        self._cv_status = defaultdict(lambda: ModelStatus.NOT_FITTED)
+        # initialize cross validation state
+        self._cv_models: dict[str, RegmodModel] = {}
+        self._cv_scores: dict[str, float | None] = {}
+        self._cv_status: dict[str, ModelStatus] = {}
 
     @property
     def coef(self) -> NDArray | None:
@@ -158,7 +157,9 @@ class Learner:
                 )
 
         if holdouts:
-            # If holdout cols are provided, loop through to calculate OOS score
+            # If holdout cols are provided, loop through to calculate OOS score.
+            # For fast gaussian models, avoid constructing per-holdout regmod
+            # models and score directly from cached linear algebra.
             for holdout in holdouts:
                 linear_cache = None
                 if holdout_data is not None and holdout in holdout_data:
@@ -182,43 +183,59 @@ class Learner:
                             dtype=int,
                         )
 
-                self._cv_status[holdout] = self._fit(
+                used_fast_cv = (
+                    self._use_fast_linear
+                    and self.get_score is not None
+                    and linear_cache is not None
+                    and holdout_linear_idx is not None
+                    and "x_val" in linear_cache
+                )
+                if used_fast_cv:
+                    status, coef = self._fit_fast_linear_coef(
+                        linear_cache=linear_cache,
+                        linear_idx=holdout_linear_idx,
+                    )
+                    self._cv_status[holdout] = status
+                    if status == ModelStatus.SUCCESS:
+                        x_val = linear_cache["x_val"][:, holdout_linear_idx]
+                        pred = x_val.dot(coef)
+                        self._cv_scores[holdout] = self.get_score(
+                            obs=val_obs, pred=pred
+                        )
+                    else:
+                        self.status = ModelStatus.CV_FAILED
+                        break
+                    continue
+
+                cv_model = self._cv_models.get(holdout)
+                if cv_model is None:
+                    cv_model = self._get_model()
+                    self._cv_models[holdout] = cv_model
+
+                status = self._fit(
                     train_data,
-                    self._cv_models[holdout],
+                    cv_model,
                     linear_cache=linear_cache,
                     linear_idx=holdout_linear_idx,
                     **optimizer_options,
                 )
-                if self._cv_status[holdout] == ModelStatus.SUCCESS:
+                self._cv_status[holdout] = status
+                if status == ModelStatus.SUCCESS:
                     if self.get_score is None:
-                        self._cv_scores[holdout] = self.evaluate(
-                            val_data, self._cv_models[holdout]
-                        )
+                        self._cv_scores[holdout] = self.evaluate(val_data, cv_model)
                     else:
-                        if (
-                            self._use_fast_linear
-                            and linear_cache is not None
-                            and holdout_linear_idx is not None
-                            and "x_val" in linear_cache
-                        ):
-                            x_val = linear_cache["x_val"][:, holdout_linear_idx]
-                            coef = self._cv_models[holdout].opt_coefs
-                            pred = x_val.dot(coef)
-                        else:
-                            pred = self.predict(
-                                val_data, model=self._cv_models[holdout]
-                            )
+                        pred = self.predict(val_data, model=cv_model)
                         self._cv_scores[holdout] = self.get_score(
                             obs=val_obs, pred=pred
                         )
                 else:
                     self.status = ModelStatus.CV_FAILED
                     break
+
             if self.status != ModelStatus.CV_FAILED:
                 self.score = np.mean(list(self._cv_scores.values()))
             # clear all cv models for storage efficiency
             self._cv_models.clear()
-
         # Fit final model with all data included
         if self.status != ModelStatus.CV_FAILED:
             self.status = self._fit(
@@ -395,6 +412,30 @@ class Learner:
         model = _detach_df(model)
         return status
 
+    def _fit_fast_linear_coef(
+        self,
+        linear_cache: dict[str, Any],
+        linear_idx: NDArray,
+    ) -> tuple[ModelStatus, NDArray | None]:
+        try:
+            idx = np.asarray(linear_idx, dtype=int)
+            xtwx_all = linear_cache["xtwx"]
+            xtwy_all = linear_cache["xtwy"]
+            xtwx = xtwx_all[np.ix_(idx, idx)]
+            xtwy = xtwy_all[idx]
+            try:
+                coef = np.linalg.solve(xtwx, xtwy)
+            except np.linalg.LinAlgError:
+                coef, _, rank, _ = np.linalg.lstsq(xtwx, xtwy, rcond=None)
+                if rank < xtwx.shape[1]:
+                    return ModelStatus.SINGULAR, None
+            return ModelStatus.SUCCESS, np.asarray(coef, dtype=float)
+        except Exception as exc:
+            msg = str(exc).lower()
+            if isinstance(exc, np.linalg.LinAlgError) or "singular" in msg:
+                return ModelStatus.SINGULAR, None
+            return ModelStatus.SOLVER_FAILED, None
+
     def _fit_fast_linear(
         self,
         data: DataFrame,
@@ -404,17 +445,14 @@ class Learner:
     ) -> ModelStatus:
         try:
             if linear_cache is not None and linear_idx is not None:
+                status, coef = self._fit_fast_linear_coef(linear_cache, linear_idx)
+                if status != ModelStatus.SUCCESS or coef is None:
+                    return status
                 idx = np.asarray(linear_idx, dtype=int)
                 xtwx_all = linear_cache["xtwx"]
                 xtwy_all = linear_cache["xtwy"]
                 xtwx = xtwx_all[np.ix_(idx, idx)]
                 xtwy = xtwy_all[idx]
-                try:
-                    coef = np.linalg.solve(xtwx, xtwy)
-                except np.linalg.LinAlgError:
-                    coef, _, rank, _ = np.linalg.lstsq(xtwx, xtwy, rcond=None)
-                    if rank < xtwx.shape[1]:
-                        return ModelStatus.SINGULAR
                 n_obs = int(linear_cache["n_obs"])
                 ywy = float(linear_cache["ywy"])
             else:
