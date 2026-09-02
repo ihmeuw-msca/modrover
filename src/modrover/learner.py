@@ -11,6 +11,8 @@ from regmod.models import Model as RegmodModel
 from regmod.variable import Variable
 from scipy.stats import norm
 
+from .globals import get_rmse
+
 LearnerID = tuple[int, ...]
 
 
@@ -210,11 +212,30 @@ class Learner:
                     )
                     self._cv_status[holdout] = status
                     if status == ModelStatus.SUCCESS:
-                        x_val = linear_cache["x_val"][:, holdout_linear_idx]
-                        pred = x_val.dot(coef)
-                        self._cv_scores[holdout] = self.get_score(
-                            obs=val_obs, pred=pred
-                        )
+                        if self.get_score is get_rmse and "val_xtx" in linear_cache:
+                            # Gram-based validation scoring: identical algebra
+                            # to get_rmse(obs, x_val @ coef) but O(s^2) per
+                            # learner instead of O(n_val * s). Clip at 0 to
+                            # guard against negative SSE from floating-point
+                            # cancellation.
+                            idx = holdout_linear_idx
+                            val_xtx = linear_cache["val_xtx"][np.ix_(idx, idx)]
+                            val_xty = linear_cache["val_xty"][idx]
+                            sse = (
+                                linear_cache["val_yty"]
+                                - 2.0 * float(coef.dot(val_xty))
+                                + float(coef.dot(val_xtx.dot(coef)))
+                            )
+                            mse = max(sse, 0.0) / linear_cache["n_val"]
+                            self._cv_scores[holdout] = float(
+                                np.exp(-np.sqrt(mse))
+                            )
+                        else:
+                            x_val = linear_cache["x_val"][:, holdout_linear_idx]
+                            pred = x_val.dot(coef)
+                            self._cv_scores[holdout] = self.get_score(
+                                obs=val_obs, pred=pred
+                            )
                     else:
                         self.status = ModelStatus.CV_FAILED
                         break

@@ -1,3 +1,4 @@
+import os
 from copy import deepcopy
 from typing import Any, Callable
 
@@ -11,6 +12,16 @@ from .exceptions import InvalidConfigurationError, NotFittedError
 from .globals import get_rmse, model_type_dict
 from .learner import Learner, LearnerID, ModelStatus
 from .strategies import get_strategy
+
+
+def _gram_scoring_enabled() -> bool:
+    """Gram-based validation scoring is ON by default; set the environment
+    variable ``MODROVER_GRAM_SCORING=0`` to fall back to row-based scoring."""
+    return os.environ.get("MODROVER_GRAM_SCORING", "1").strip().lower() not in (
+        "0",
+        "false",
+        "off",
+    )
 
 
 class Rover:
@@ -490,9 +501,25 @@ class Rover:
                 linear_cache = self._build_linear_cache(
                     train_data, cov_names, col_index
                 )
-                linear_cache["x_val"] = val_data[cov_names].to_numpy(
-                    dtype=float, copy=False
-                )
+                x_val = val_data[cov_names].to_numpy(dtype=float, copy=False)
+                linear_cache["x_val"] = x_val
+                if _gram_scoring_enabled():
+                    # Unweighted validation Gram matrices: the holdout score
+                    # (globals.get_rmse) is exp(-sqrt(mean((obs - pred)**2)))
+                    # with NO weights, so the validation SSE for any coef c is
+                    #   ||y_v - X_v c||^2
+                    #     = y_v'y_v - 2 c'(X_v'y_v) + c'(X_v'X_v)c,
+                    # computable in O(s^2) per learner from these one-time
+                    # per-holdout Grams instead of O(n_val * s) predictions.
+                    # (The weighted full-minus-train cache subtraction is only
+                    # equivalent when weights*trim_weights == 1 everywhere;
+                    # direct unweighted validation Grams are exact always and
+                    # avoid large-magnitude cancellation.)
+                    y_val = np.asarray(val_obs, dtype=float).reshape(-1)
+                    linear_cache["val_xtx"] = x_val.T.dot(x_val)
+                    linear_cache["val_xty"] = x_val.T.dot(y_val)
+                    linear_cache["val_yty"] = float(y_val.dot(y_val))
+                    linear_cache["n_val"] = int(len(y_val))
             split_data[holdout] = (train_data, val_data, val_obs, linear_cache)
         return split_data, full_linear_cache
 
