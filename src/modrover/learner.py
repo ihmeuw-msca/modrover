@@ -68,11 +68,13 @@ class Learner:
         self.weights = weights
         self.get_score = get_score
 
-        # convert str to Variable
+        # convert str to Variable; pre-built Variable instances (e.g. from the
+        # Rover-level shared-variable cache) are used as-is
         for param_spec in param_specs.values():
-            param_spec["variables"] = list(
-                map(Variable, param_spec["variables"])
-            )
+            param_spec["variables"] = [
+                var if isinstance(var, Variable) else Variable(var)
+                for var in param_spec["variables"]
+            ]
         self.param_specs = param_specs
         self._main_cov_names = [
             var.name for var in self.param_specs[self.main_param]["variables"]

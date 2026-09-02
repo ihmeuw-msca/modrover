@@ -7,6 +7,7 @@ import numpy as np
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from numpy.typing import NDArray
 from pandas import DataFrame
+from regmod.variable import Variable
 
 from .exceptions import InvalidConfigurationError, NotFittedError
 from .globals import get_rmse, model_type_dict
@@ -22,6 +23,19 @@ def _gram_scoring_enabled() -> bool:
         "false",
         "off",
     )
+
+
+def _batched_solves_enabled() -> bool:
+    """Batched per-layer solves (and the shared-Variable cache) are ON by
+    default; set ``MODROVER_BATCHED_SOLVES=0`` to fall back to the
+    per-learner fitting path."""
+    return os.environ.get(
+        "MODROVER_BATCHED_SOLVES", "1"
+    ).strip().lower() not in ("0", "false", "off")
+
+
+# children per batched linear solve; bounds the (C, s, s) stack memory
+_BATCH_CHUNK = 2048
 
 
 class Rover:
@@ -82,6 +96,7 @@ class Rover:
 
         self.learners: dict[LearnerID, Learner] = {}
         self._coef_index_cache: dict[LearnerID, list[int]] = {}
+        self._variable_cache: dict[str, Variable] = {}
 
     @property
     def model_class(self) -> type:
@@ -406,13 +421,63 @@ class Rover:
         )
         return param_specs
 
+    def _can_share_variables(self) -> bool:
+        """Whether learners may share cached Variable objects. Only the fast
+        gaussian lightweight path is eligible: there a Learner only ever reads
+        ``Variable.name``, so identical Variables can be constructed once per
+        Rover instead of 9+ times per learner. Mirrors the eligibility checks
+        of ``Learner._can_use_fast_linear`` plus the lightweight-model
+        condition (``get_score is not None``)."""
+        cached = getattr(self, "_share_variables_ok", None)
+        if cached is None:
+            main_spec = self.param_specs.get(self.main_param, {})
+            inv_link = main_spec.get("inv_link")
+            cached = (
+                getattr(self, "get_score", None) is not None
+                and self.main_param == "mu"
+                and tuple(self.model_class.param_names) == ("mu",)
+                and (inv_link is None or inv_link == "identity")
+            )
+            self._share_variables_ok = cached
+        return cached
+
+    def _get_variable(self, name: str) -> Variable:
+        cache = getattr(self, "_variable_cache", None)
+        if cache is None:
+            cache = self._variable_cache = {}
+        var = cache.get(name)
+        if var is None:
+            var = Variable(name)
+            cache[name] = var
+        return var
+
+    def _get_param_specs_shared(self, learner_id: LearnerID) -> dict[str, dict]:
+        """Same result as ``_get_param_specs`` (fresh spec dicts and variable
+        lists per learner) but without the per-learner deepcopy, and with
+        Variable objects drawn from the per-Rover cache."""
+        param_specs = {}
+        for param, spec in self.param_specs.items():
+            new_spec = dict(spec)
+            variables = [self._get_variable(name) for name in spec["variables"]]
+            if param == self.main_param:
+                variables.extend(
+                    self._get_variable(self.cov_exploring[i])
+                    for i in learner_id
+                )
+            new_spec["variables"] = variables
+            param_specs[param] = new_spec
+        return param_specs
+
     def _get_learner(
         self, learner_id: LearnerID, use_cache: bool = True
     ) -> Learner:
         if learner_id in self.learners and use_cache:
             return self.learners[learner_id]
 
-        param_specs = self._get_param_specs(learner_id)
+        if _batched_solves_enabled() and self._can_share_variables():
+            param_specs = self._get_param_specs_shared(learner_id)
+        else:
+            param_specs = self._get_param_specs(learner_id)
         return Learner(
             self.model_class,
             self.obs,
@@ -447,15 +512,27 @@ class Rover:
             strategy = get_strategy(strategy)(num_covs=len(self.cov_exploring))
             curr_ids = {strategy.base_learner_id}
             while curr_ids:
+                # collect this layer's unfitted learners in the same iteration
+                # order as the original per-learner loop, so that the
+                # self.learners insertion order (and hence learner_info /
+                # learner-table row order) is unchanged
+                pending: list[tuple[LearnerID, Learner]] = []
                 for learner_id in curr_ids:
                     learner = self._get_learner(learner_id)
                     if learner.status == ModelStatus.NOT_FITTED:
-                        learner.fit(
-                            data,
-                            self.holdouts,
-                            holdout_data=holdout_data,
-                            full_linear_cache=full_linear_cache,
-                        )
+                        pending.append((learner_id, learner))
+                if pending:
+                    if not self._fit_layer_batched(
+                        pending, data, holdout_data, full_linear_cache
+                    ):
+                        for _, learner in pending:
+                            learner.fit(
+                                data,
+                                self.holdouts,
+                                holdout_data=holdout_data,
+                                full_linear_cache=full_linear_cache,
+                            )
+                    for learner_id, learner in pending:
                         self.learners[learner_id] = learner
 
                 next_ids = strategy.get_next_layer(
@@ -464,6 +541,191 @@ class Rover:
                     **options,
                 )
                 curr_ids = next_ids
+
+    # batched layer solves =====================================================
+    def _fit_layer_batched(
+        self,
+        pending: list[tuple[LearnerID, Learner]],
+        data: DataFrame,
+        holdout_data: dict | None,
+        full_linear_cache: dict[str, Any] | None,
+    ) -> bool:
+        """Fit all learners of one exploration layer with stacked linear
+        solves (one ``np.linalg.solve`` on a (C, s, s) Gram stack per
+        holdout/full fit) instead of C independent solves.
+
+        Only the fast gaussian lightweight path with gram-based validation
+        scoring is eligible; returns False (caller falls back to the
+        per-learner path) otherwise. The solves are the same LAPACK ``gesv``
+        on the same matrices, so coefficients are bit-identical to the
+        per-learner path; the vectorized SSE reductions (einsum/matmul) may
+        reorder floating-point accumulation of the *scores* at the ~1e-15
+        level. Set ``MODROVER_BATCHED_SOLVES=0`` to disable."""
+        if not _batched_solves_enabled():
+            return False
+        if not self.holdouts or holdout_data is None:
+            return False
+        if full_linear_cache is None:
+            return False
+        col_index = full_linear_cache.get("col_index")
+        if col_index is None:
+            return False
+        for _, learner in pending:
+            if not (
+                learner._use_fast_linear
+                and learner._use_lightweight_model
+                and learner.get_score is get_rmse
+            ):
+                return False
+        caches = []
+        for holdout in self.holdouts:
+            entry = holdout_data.get(holdout)
+            if entry is None:
+                return False
+            linear_cache = entry[3]
+            if linear_cache is None or "val_xtx" not in linear_cache:
+                return False
+            caches.append(linear_cache)
+
+        # group by learner size (layers are uniform for forward/backward, but
+        # e.g. the full strategy and mixed strategies need the generality)
+        groups: dict[int, list[Learner]] = {}
+        for _, learner in pending:
+            groups.setdefault(len(learner._main_cov_names), []).append(learner)
+        for group in groups.values():
+            for start in range(0, len(group), _BATCH_CHUNK):
+                self._fit_group_batched(
+                    group[start : start + _BATCH_CHUNK],
+                    data,
+                    caches,
+                    full_linear_cache,
+                    col_index,
+                )
+        return True
+
+    @staticmethod
+    def _solve_stacked(
+        cache: dict[str, Any], idx: NDArray, group: list[Learner]
+    ) -> tuple[NDArray, list[ModelStatus]]:
+        """One batched solve for all children; on any singular child fall
+        back to the exact per-learner solve path so that statuses and the
+        lstsq near-singular rescue behave identically to the unbatched code."""
+        xtwx = cache["xtwx"]
+        xtwy = cache["xtwy"]
+        gram = xtwx[idx[:, :, None], idx[:, None, :]]
+        rhs = xtwy[idx]
+        try:
+            # rhs as an explicit stack of column vectors (nrhs=1 gesv, the
+            # same LAPACK call the per-learner vector solve makes)
+            coefs = np.linalg.solve(gram, rhs[:, :, None])[:, :, 0]
+            statuses = [ModelStatus.SUCCESS] * len(group)
+        except np.linalg.LinAlgError:
+            coefs = np.full(rhs.shape, np.nan)
+            statuses = []
+            for c, learner in enumerate(group):
+                status, coef = learner._fit_fast_linear_coef(cache, idx[c])
+                statuses.append(status)
+                if status == ModelStatus.SUCCESS and coef is not None:
+                    coefs[c] = coef
+        return coefs, statuses
+
+    def _fit_group_batched(
+        self,
+        group: list[Learner],
+        data: DataFrame,
+        caches: list[dict[str, Any]],
+        full_linear_cache: dict[str, Any],
+        col_index: dict[str, int],
+    ) -> None:
+        """Fit one same-size chunk of a layer: per-holdout stacked CV solves
+        with vectorized gram scoring, then one stacked full-data solve+inverse
+        for coefficients and vcov. Per-learner statuses, cv bookkeeping and
+        early-stopping semantics replicate ``Learner.fit`` exactly."""
+        idx = np.array(
+            [
+                [col_index[name] for name in learner._main_cov_names]
+                for learner in group
+            ],
+            dtype=int,
+        )  # (C, s)
+        n_children = len(group)
+        active = np.ones(n_children, dtype=bool)
+
+        for holdout, cache in zip(self.holdouts, caches):
+            if not active.any():
+                break
+            coefs, statuses = self._solve_stacked(cache, idx, group)
+            scores = None
+            if any(st == ModelStatus.SUCCESS for st in statuses):
+                # ||y_v - X_v c||^2 = y'y - 2 c'(X_v'y_v) + c'(X_v'X_v)c for
+                # all children at once; identical algebra to the per-learner
+                # gram scoring, vectorized over the stack
+                val_xtx = cache["val_xtx"]
+                val_xty = cache["val_xty"]
+                vg = val_xtx[idx[:, :, None], idx[:, None, :]]
+                vy = val_xty[idx]
+                lin = np.einsum("ij,ij->i", coefs, vy)
+                quad = np.einsum(
+                    "ij,ij->i",
+                    coefs,
+                    np.matmul(vg, coefs[:, :, None])[:, :, 0],
+                )
+                sse = cache["val_yty"] - 2.0 * lin + quad
+                mse = np.maximum(sse, 0.0) / cache["n_val"]
+                scores = np.exp(-np.sqrt(mse))
+            for c, learner in enumerate(group):
+                if not active[c]:
+                    continue
+                status = statuses[c]
+                learner._cv_status[holdout] = status
+                if status == ModelStatus.SUCCESS:
+                    learner._cv_scores[holdout] = float(scores[c])
+                else:
+                    learner.status = ModelStatus.CV_FAILED
+                    active[c] = False
+
+        for c, learner in enumerate(group):
+            if active[c]:
+                learner.score = np.mean(list(learner._cv_scores.values()))
+            learner._cv_models.clear()
+
+        active_idx = np.flatnonzero(active)
+        if len(active_idx) == 0:
+            return
+        idx_a = idx[active_idx]
+        xtwx = full_linear_cache["xtwx"]
+        xtwy = full_linear_cache["xtwy"]
+        gram = xtwx[idx_a[:, :, None], idx_a[:, None, :]]
+        rhs = xtwy[idx_a]
+        try:
+            coefs = np.linalg.solve(gram, rhs[:, :, None])[:, :, 0]
+            gram_inv = np.linalg.inv(gram)
+        except np.linalg.LinAlgError:
+            # a singular child poisons the whole stack: refit those learners
+            # through the exact per-learner full-fit path
+            for c in active_idx:
+                learner = group[c]
+                learner.status = learner._fit(
+                    data,
+                    linear_cache=full_linear_cache,
+                    linear_idx=idx[c],
+                )
+            return
+        lin = np.einsum("ij,ij->i", coefs, rhs)
+        quad = np.einsum(
+            "ij,ij->i", coefs, np.matmul(gram, coefs[:, :, None])[:, :, 0]
+        )
+        wsse = np.maximum(
+            float(full_linear_cache["ywy"]) - 2.0 * lin + quad, 0.0
+        )
+        dof = max(int(full_linear_cache["n_obs"]) - idx_a.shape[1], 1)
+        sigma2 = wsse / dof
+        vcov = sigma2[:, None, None] * gram_inv
+        for row, c in enumerate(active_idx):
+            learner = group[c]
+            learner.model.opt_coefs = coefs[row].copy()
+            learner.model.opt_vcov = vcov[row].copy()
+            learner.status = ModelStatus.SUCCESS
 
     def _prepare_holdout_data(
         self, data: DataFrame, holdouts: list[str]
